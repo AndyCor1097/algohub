@@ -95,11 +95,20 @@ def build_zone_maps(raw: pd.DataFrame) -> dict:
                 sub = grp[grp["pitch_type"].isin(types)]
                 if len(sub) >= 10:
                     pt_barrels[pt_group] = {
-                        "barrel_rate": float(sub["barrel"].mean()),
+                        "barrel_rate": float(sub["barrel"].mean()) if not pd.isna(sub["barrel"].mean()) else 0,
                         "hr_rate":     float(sub["is_hr"].sum() / max(games, 1)),
-                        "avg_ev":      float(pd.to_numeric(sub["launch_speed"], errors="coerce").mean()),
+                        "avg_ev":      float(pd.to_numeric(sub["launch_speed"], errors="coerce").fillna(0).mean()),
                         "n":           len(sub),
                     }
+
+        # FB% and HR/FB
+        fb_rate = 0.0
+        hr_fb_rate = 0.0
+        if "bb_type" in grp.columns:
+            fb_rate = float(grp["bb_type"].isin(["fly_ball"]).mean())
+            fly_balls = grp[grp["bb_type"] == "fly_ball"]
+            if len(fly_balls) >= 5:
+                hr_fb_rate = float(fly_balls["is_hr"].mean())
 
         batter_zones[int(pid)] = {
             "zone_hrs":    zone_hrs,
@@ -110,6 +119,8 @@ def build_zone_maps(raw: pd.DataFrame) -> dict:
             "barrel_rate": float(grp["barrel"].mean()) if not pd.isna(grp["barrel"].mean()) else 0,
             "hard_hit":    float(grp["hard_hit"].mean()) if "hard_hit" in grp.columns and not pd.isna(grp["hard_hit"].mean()) else 0,
             "sweet_spot":  float(grp["sweet_spot"].mean()) if "sweet_spot" in grp.columns and not pd.isna(grp["sweet_spot"].mean()) else 0,
+            "fb_rate":     fb_rate,
+            "hr_fb_rate":  hr_fb_rate,
             "avg_ev":      float(pd.to_numeric(grp["launch_speed"], errors="coerce").fillna(0).mean()) if "launch_speed" in grp.columns else 0,
             "avg_la":      float(pd.to_numeric(grp["launch_angle"], errors="coerce").fillna(0).mean()) if "launch_angle" in grp.columns else 0,
         }

@@ -216,6 +216,23 @@ class HITScoreEngine:
         for pid, grp in batted_clean.groupby("batter"):
             games = raw_clean[raw_clean["batter"] == pid]["game_date"].nunique()
             hrs   = grp["is_hr"].sum()
+            batter_all = raw_clean[raw_clean["batter"] == pid]
+
+            # SwStr% — swing and miss rate (lower = better contact = more HRs)
+            swstr_rate = 0.0
+            if "description" in batter_all.columns:
+                swings     = batter_all[batter_all["description"].isin(["swinging_strike","swinging_strike_blocked","foul_tip"])]
+                total_p    = len(batter_all)
+                swstr_rate = float(len(swings) / max(total_p, 1))
+
+            # SwStr% by pitch type — key matchup signal
+            swstr_by_pt = {}
+            if "description" in batter_all.columns and "pitch_type" in batter_all.columns:
+                for pt_group, types in [("fb", FASTBALL_TYPES), ("brk", BREAKING_TYPES), ("off", OFFSPEED_TYPES)]:
+                    sub = batter_all[batter_all["pitch_type"].isin(types)]
+                    if len(sub) >= 10:
+                        sw = sub[sub["description"].isin(["swinging_strike","swinging_strike_blocked","foul_tip"])]
+                        swstr_by_pt[pt_group] = float(len(sw) / max(len(sub), 1))
 
             # Zone HR map
             zone_hrs = {}
@@ -251,6 +268,24 @@ class HITScoreEngine:
                 la_num = pd.to_numeric(grp["launch_angle"], errors="coerce")
                 la_consistency = float(((la_num >= 15) & (la_num <= 35)).fillna(False).mean())
 
+            # Fly ball % — direct from bb_type
+            fb_rate = 0.0
+            if "bb_type" in grp.columns:
+                fb_balls = grp["bb_type"].isin(["fly_ball"])
+                fb_rate  = float(fb_balls.mean())
+
+            # HR/FB — how often fly balls become HRs
+            hr_fb_rate = 0.0
+            if "bb_type" in grp.columns:
+                fly_balls = grp[grp["bb_type"] == "fly_ball"]
+                if len(fly_balls) >= 5:
+                    hr_fb_rate = float(fly_balls["is_hr"].mean())
+
+            # ISO proxy — from Statcast estimated SLG - estimated BA
+            # Use woba as proxy since we don't have direct SLG/BA
+            # Instead calculate from HR rate and hard hit — higher = more ISO
+            iso_proxy = float(hrs / max(len(grp), 1)) * 4 + float(grp["barrel"].mean()) * 2
+
             self._batter_index[int(pid)] = {
                 "games":          int(games),
                 "bip":            len(grp),
@@ -259,6 +294,11 @@ class HITScoreEngine:
                 "barrel_rate":    float(grp["barrel"].mean()),
                 "sweet_spot":     float(grp["sweet_spot"].mean()) if "sweet_spot" in grp.columns else 0,
                 "la_consistency": la_consistency,
+                "fb_rate":        fb_rate,
+                "hr_fb_rate":     hr_fb_rate,
+                "iso_proxy":      round(iso_proxy, 3),
+                "swstr_rate":     swstr_rate,
+                "swstr_by_pt":    swstr_by_pt,
                 "hard_hit":       float(grp["hard_hit"].mean()) if "hard_hit" in grp.columns else 0,
                 "avg_ev":         float(pd.to_numeric(grp["launch_speed"], errors="coerce").fillna(0).mean()) if "launch_speed" in grp.columns else 0,
                 "avg_la":         float(pd.to_numeric(grp["launch_angle"], errors="coerce").fillna(0).mean()) if "launch_angle" in grp.columns else 0,
@@ -472,21 +512,42 @@ class HITScoreEngine:
         hard_hit   = b.get("hard_hit", 0)
         hh_score   = min(hard_hit / 0.55, 1.0) * 12
 
-        # 3. xwOBA (12pts) — true contact quality
+        # 3. xwOBA (10pts) — true contact quality
         xwoba = b.get("xwoba") or 0.300
-        xwoba_score = min(max((xwoba - 0.250) / 0.200, 0), 1.0) * 12
+        xwoba_score = min(max((xwoba - 0.250) / 0.200, 0), 1.0) * 10
 
-        # 4. Launch angle consistency (10pts) — % in 15-35 degree HR window
+        # 4. Launch angle consistency (8pts) — % in 15-35 degree HR window
         la_cons = b.get("la_consistency", 0)
-        la_score = min(la_cons / 0.45, 1.0) * 10
+        la_score = min(la_cons / 0.45, 1.0) * 8
 
-        # 5. Exit velo (8pts)
+        # 5. FB% (7pts) — direct fly ball rate
+        fb_rate  = b.get("fb_rate", 0)
+        fb_score = min(fb_rate / 0.40, 1.0) * 7
+
+        # 6. HR/FB (8pts) — how often fly balls become HRs
+        hr_fb = b.get("hr_fb_rate", 0)
+        hrfb_score = min(hr_fb / 0.20, 1.0) * 8
+
+        # 7. Exit velo (6pts)
         avg_ev     = b.get("avg_ev", 85)
-        ev_score   = min(max((avg_ev - 82) / 16, 0), 1.0) * 8
+        ev_score   = min(max((avg_ev - 82) / 16, 0), 1.0) * 6
 
-        # 6. Pull rate bonus (5pts) — pull hitters in favorable parks
+        # 8. Pull rate bonus (4pts) — pull hitters in favorable parks
         pull_rate  = b.get("pulled_rate", 0)
-        pull_score = min(pull_rate / 0.55, 1.0) * 5 * min(park_factor / 1.05, 1.0)
+        pull_score = min(pull_rate / 0.55, 1.0) * 4 * min(park_factor / 1.05, 1.0)
+
+        # SwStr% matchup bonus (up to +5)
+        # Low batter SwStr% vs pitcher's primary pitch = cleaner contact = more HRs
+        swstr_bonus = 0.0
+        swstr_by_pt = b.get("swstr_by_pt", {})
+        primary_pitch = p.get("primary_pitch") if p else None
+        if primary_pitch and swstr_by_pt:
+            pt_group = "fb" if primary_pitch in FASTBALL_TYPES else "brk" if primary_pitch in BREAKING_TYPES else "off"
+            batter_swstr = swstr_by_pt.get(pt_group, b.get("swstr_rate", 0.10))
+        else:
+            batter_swstr = b.get("swstr_rate", 0.10)
+        # Elite contact: <5% SwStr. Avg: ~10%. Poor: >15%
+        swstr_bonus = min(max((0.15 - batter_swstr) / 0.10, 0), 1.0) * 5
 
         # ── Pitcher signals ───────────────────────────────────────────────────
 
@@ -520,9 +581,10 @@ class HITScoreEngine:
         zone_bonus = min(zone_count * 2, 10)
 
         # ── Composite ─────────────────────────────────────────────────────────
-        base_score = (barrel_score + hh_score + xwoba_score + la_score + ev_score +
-                      pull_score + pitcher_score + platoon_score + env_score + form_score)
-        hit_score  = round(min(base_score + zone_bonus, 100), 1)
+        base_score = (barrel_score + hh_score + xwoba_score + la_score +
+                      fb_score + hrfb_score + ev_score + pull_score +
+                      pitcher_score + platoon_score + env_score + form_score)
+        hit_score  = round(min(base_score + zone_bonus + swstr_bonus, 100), 1)
 
         # ── Grade ─────────────────────────────────────────────────────────────
         if hit_score >= 70:   grade = "ELITE"
@@ -560,8 +622,11 @@ class HITScoreEngine:
             "hh_score":       round(hh_score, 1),
             "xwoba_score":    round(xwoba_score, 1),
             "la_score":       round(la_score, 1),
+            "fb_score":       round(fb_score, 1),
+            "hrfb_score":     round(hrfb_score, 1),
             "ev_score":       round(ev_score, 1),
             "pull_score":     round(pull_score, 1),
+            "swstr_bonus":    round(swstr_bonus, 1),
             "pitcher_score":  round(pitcher_score, 1),
             "platoon_score":  round(platoon_score, 1),
             "env_score":      round(env_score, 1),
@@ -588,11 +653,13 @@ class HITScoreEngine:
             "hard_hit_pct":   round(hard_hit * 100, 1),
             "xwoba":          round(xwoba, 3) if xwoba else None,
             "la_consistency": round(la_cons * 100, 1),
+            "fb_rate":        round(fb_rate * 100, 1),
+            "hr_fb_rate":     round(hr_fb * 100, 1),
             "pull_rate":      round(pull_rate * 100, 1),
+            "swstr_rate":     round(batter_swstr * 100, 1),
             "avg_ev":         round(avg_ev, 1),
             "avg_la":         round(b.get("avg_la", 0), 1),
             "hr_rate":        round(hr_rate * 100, 2),
-            "xwoba":          b.get("xwoba") if b else None,
             "bip":            b.get("bip", 0) if b else 0,
 
             # Pitcher raw stats

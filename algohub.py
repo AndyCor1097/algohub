@@ -1,6 +1,6 @@
 """
 algohub.py — AlgoHub Full Dashboard
-Game-first navigation. HIT Score. Zone heatmaps. K props. Parlay builder.
+Game-first navigation. ALGO Score. Zone heatmaps. K props. Parlay builder.
 
 Run with: python -m streamlit run algohub.py
 """
@@ -103,12 +103,12 @@ html, body, [class*="css"] { background: var(--bg) !important; color: var(--text
 .batter-stat { font-family: 'DM Mono', monospace; font-size: 0.78rem; text-align: right; }
 .batter-header { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted); text-align: right; }
 
-/* HIT Score badge */
-.hit-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-family: 'Bebas Neue', sans-serif; font-size: 0.9rem; letter-spacing: 0.05em; }
-.hit-elite    { background: #450a0a33; color: #fca5a5; border: 1px solid #ef444466; }
-.hit-strong   { background: #45260333; color: #fcd34d; border: 1px solid #f59e0b66; }
-.hit-moderate { background: #0c2d4833; color: #7dd3fc; border: 1px solid #3b82f666; }
-.hit-fade     { background: #11182733; color: #475569; border: 1px solid #1c233366; }
+/* ALGO Score badge */
+.algo-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-family: 'Bebas Neue', sans-serif; font-size: 0.9rem; letter-spacing: 0.05em; }
+.algo-elite    { background: #450a0a33; color: #fca5a5; border: 1px solid #ef444466; }
+.algo-strong   { background: #45260333; color: #fcd34d; border: 1px solid #f59e0b66; }
+.algo-moderate { background: #0c2d4833; color: #7dd3fc; border: 1px solid #3b82f666; }
+.algo-fade     { background: #11182733; color: #475569; border: 1px solid #1c233366; }
 
 /* Zone badge */
 .zone-badge { background: #0c2d48; color: #60a5fa; border: 1px solid #1e4d7a; padding: 1px 6px; border-radius: 3px; font-family: 'DM Mono', monospace; font-size: 0.72rem; font-weight: 600; }
@@ -159,6 +159,23 @@ div[data-testid="metric-container"] { background: var(--s1); border: 1px solid v
 
 
 # ── Data Loading ───────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=300)
+def load_precomputed():
+    """Load pre-computed data from daily_run.py if available."""
+    path = "data/today.json"
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        # Check if it's from today
+        if data.get("date") == datetime.today().strftime("%Y-%m-%d"):
+            return data
+        return None
+    except:
+        return None
+
 
 @st.cache_data(ttl=60)
 def load_schedule():
@@ -254,10 +271,10 @@ def load_player_hand(player_id: int) -> dict:
 
 @st.cache_data(ttl=600)
 def load_statcast_engine():
-    """Load bulk Statcast data and build HIT Score engine."""
+    """Load bulk Statcast data and build ALGO Score engine."""
     try:
         import pybaseball as pb
-        from hit_score import HITScoreEngine
+        from algo_score import HITScoreEngine
         pb.cache.enable()
         end   = datetime.today()
         start = end - timedelta(days=30)
@@ -452,7 +469,7 @@ def build_overlap_fig(batter_zones: dict, pitcher_zones: dict, height=180):
 def render_batter_row(rank, player, hit_data, odds=None):
     name    = player.get("player_name", "—")
     grade   = hit_data.get("grade", "MODERATE").lower()
-    score   = hit_data.get("hit_score", 0)
+    score   = hit_data.get("algo_score", 0)
     brl     = hit_data.get("barrel_rate", 0)
     ev      = hit_data.get("avg_ev", 0)
     hr_r    = hit_data.get("hr_rate", 0)
@@ -477,7 +494,7 @@ def render_batter_row(rank, player, hit_data, odds=None):
     <div class="batter-row {grade}">
         <span class="batter-rank">{rank}</span>
         <span class="batter-name">{name} {bat_icon} {hand_str}</span>
-        <span class="hit-badge hit-{grade}">{score:.0f}</span>
+        <span class="algo-badge algo-{grade}">{score:.0f}</span>
         <span class="batter-stat" style="color:{zf_color};font-family:'DM Mono',monospace;font-weight:600">ZF {zf:.3f}</span>
         <span class="batter-stat {'stat-cell-green' if brl>=15 else 'stat-cell-amber' if brl>=8 else 'stat-cell-muted'}">{brl:.1f}%</span>
         <span class="batter-stat {'stat-cell-green' if hh>=50 else 'stat-cell-amber' if hh>=40 else 'stat-cell-muted'}">{hh:.1f}%</span>
@@ -490,7 +507,50 @@ def render_batter_row(rank, player, hit_data, odds=None):
     """, unsafe_allow_html=True)
 
 
-def render_lineup_section(title, pitcher_name, pitcher_id, pitcher_hand, batters, home_team, engine, odds_lookup, park_factor, weather):
+def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather, pf):
+    """Render lineup from pre-computed daily_run.py data."""
+    is_dome = game.get("is_dome", False)
+    wind_str = "🏟️ DOME" if is_dome else game.get("weather", {}).get("wind_label", "")
+    era = game.get("home_pitcher_era", 4.50) if pitcher_name == game.get("home_pitcher") else game.get("away_pitcher_era", 4.50)
+
+    st.markdown(f"""
+    <div class="pitcher-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <span style="font-size:.7rem;color:#475569;font-family:'DM Mono',monospace;letter-spacing:.15em">PITCHER</span><br>
+                <span class="pitcher-name">{pitcher_name}</span>
+                <span style="font-size:.75rem;color:#475569;margin-left:8px">{'LHP' if pitcher_hand=='L' else 'RHP'}</span>
+                <span style="font-size:.72rem;color:#94a3b8;margin-left:8px;font-family:'DM Mono',monospace">ERA {era:.2f}</span>
+            </div>
+            <div style="text-align:right;font-family:'DM Mono',monospace;font-size:.72rem;color:#475569">
+                PF {pf:.2f} &nbsp;|&nbsp; {wind_str}
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Column headers
+    st.markdown("""
+    <div class="batter-row" style="border:none;background:transparent;padding-bottom:2px;">
+        <span class="batter-header">#</span>
+        <span class="batter-header">BATTER</span>
+        <span class="batter-header">ALGO</span>
+        <span class="batter-header">ZF</span>
+        <span class="batter-header">BBL%</span>
+        <span class="batter-header">HH%</span>
+        <span class="batter-header">EV</span>
+        <span class="batter-header">xwOBA</span>
+        <span class="batter-header">LA%</span>
+        <span class="batter-header">PROJ%</span>
+        <span class="batter-header">EDGE</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    for i, b in enumerate(batters):
+        render_batter_row(i + 1, b, b)
+
+
+def render_lineup_section(pitcher_name, pitcher_id, pitcher_hand, batters, home_team, engine, odds_lookup, park_factor, weather):
     """Render one side of a game matchup."""
     is_dome = home_team in DOME_PARKS
     wind_boost = 0 if is_dome else max(weather.get("wind_mph", 0) * 0.1, 0)
@@ -516,7 +576,7 @@ def render_lineup_section(title, pitcher_name, pitcher_id, pitcher_hand, batters
     <div class="batter-row" style="border:none;background:transparent;padding-bottom:2px;">
         <span class="batter-header">#</span>
         <span class="batter-header">BATTER</span>
-        <span class="batter-header">HIT</span>
+        <span class="batter-header">ALGO</span>
         <span class="batter-header">ZF</span>
         <span class="batter-header">BBL%</span>
         <span class="batter-header">HH%</span>
@@ -537,7 +597,7 @@ def render_lineup_section(title, pitcher_name, pitcher_id, pitcher_hand, batters
 
         if engine:
             p_stats = load_pitcher_stats(pitcher_id) if pitcher_id else {}
-            hit_data = engine.compute_hit_score(
+            hit_data = engine.compute_algo_score(
                 batter_id    = pid,
                 pitcher_id   = pitcher_id or 0,
                 bat_side     = bat_side,
@@ -550,7 +610,7 @@ def render_lineup_section(title, pitcher_name, pitcher_id, pitcher_hand, batters
                 pitcher_hrfb = p_stats.get("hrfb", 0.12),
             )
         else:
-            hit_data = {"hit_score": 0, "grade": "MODERATE", "barrel_rate": 0,
+            hit_data = {"algo_score": 0, "grade": "MODERATE", "barrel_rate": 0,
                        "avg_ev": 0, "hr_rate": 0, "zone_count": 0, "proj_hr_pct": 0}
 
         hit_data["player_name"] = player.get("player_name","")
@@ -558,8 +618,8 @@ def render_lineup_section(title, pitcher_name, pitcher_id, pitcher_hand, batters
         hit_data["bat_side"]    = bat_side
         results.append(hit_data)
 
-    # Sort by HIT Score
-    results.sort(key=lambda x: x.get("hit_score", 0), reverse=True)
+    # Sort by ALGO Score
+    results.sort(key=lambda x: x.get("algo_score", 0), reverse=True)
 
     for i, r in enumerate(results):
         render_batter_row(i+1, r, r)
@@ -579,16 +639,22 @@ def main():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Load data
-    with st.spinner("Loading schedule..."):
-        games = load_schedule()
+    # Try pre-computed data first (from daily_run.py)
+    precomputed = load_precomputed()
 
-    if not games:
-        st.error("No games found today.")
-        return
-
-    with st.spinner("Loading Statcast engine (30 days)..."):
-        engine = load_statcast_engine()
+    if precomputed:
+        st.success(f"✓ Pre-computed data loaded — {precomputed['date']} · {len(precomputed['games'])} games")
+        games = precomputed["games"]
+        engine = None  # Not needed when using pre-computed
+    else:
+        st.info("No pre-computed data found. Run `python daily_run.py` for instant loads. Loading live...")
+        with st.spinner("Loading Statcast engine (30 days)..."):
+            engine = load_statcast_engine()
+        with st.spinner("Loading schedule..."):
+            games = load_schedule()
+        if not games:
+            st.error("No games found today.")
+            return
 
     with st.spinner("Fetching odds..."):
         odds_lookup = load_bovada_odds()
@@ -636,40 +702,53 @@ def main():
     # Tabs
     tab1, tab2, tab3, tab4 = st.tabs(["💣 HR Board", "⚡ Zone Maps", "🎳 K Props", "🎰 Parlay Builder"])
 
-    # Load rosters
-    with st.spinner("Loading rosters..."):
-        home_batters = load_roster(g.get("home_team_id", 0))
-        away_batters = load_roster(g.get("away_team_id", 0))
-
-    # Declare pitcher variables before tabs
-    away_pitcher_name = g.get("away_pitcher", "TBD")
-    away_pitcher_id   = g.get("away_pitcher_id")
-    away_pitcher_hand = load_player_hand(away_pitcher_id).get("pitch_hand","R") if away_pitcher_id else "R"
-    home_pitcher_name = g.get("home_pitcher", "TBD")
-    home_pitcher_id   = g.get("home_pitcher_id")
-    home_pitcher_hand = load_player_hand(home_pitcher_id).get("pitch_hand","R") if home_pitcher_id else "R"
+    # Load rosters and pitcher data
+    if precomputed:
+        home_batters = []
+        away_batters = []
+        away_pitcher_name = g.get("away_pitcher", "TBD")
+        away_pitcher_id   = g.get("away_pitcher_id")
+        away_pitcher_hand = g.get("away_pitcher_hand", "R")
+        home_pitcher_name = g.get("home_pitcher", "TBD")
+        home_pitcher_id   = g.get("home_pitcher_id")
+        home_pitcher_hand = g.get("home_pitcher_hand", "R")
+    else:
+        with st.spinner("Loading rosters..."):
+            home_batters = load_roster(g.get("home_team_id", 0))
+            away_batters = load_roster(g.get("away_team_id", 0))
+        away_pitcher_name = g.get("away_pitcher", "TBD")
+        away_pitcher_id   = g.get("away_pitcher_id")
+        away_pitcher_hand = load_player_hand(away_pitcher_id).get("pitch_hand","R") if away_pitcher_id else "R"
+        home_pitcher_name = g.get("home_pitcher", "TBD")
+        home_pitcher_id   = g.get("home_pitcher_id")
+        home_pitcher_hand = load_player_hand(home_pitcher_id).get("pitch_hand","R") if home_pitcher_id else "R"
 
     # ── TAB 1: HR Board ────────────────────────────────────────────────────────
     with tab1:
         left_col, right_col = st.columns(2)
 
         with left_col:
-            st.markdown(f'<div class="section-header">{away_pitcher_name} → {home_team} BATTERS</div>',
-                       unsafe_allow_html=True)
-            home_results = render_lineup_section(
-                f"{away_pitcher_name} vs {home_team}",
-                away_pitcher_name, away_pitcher_id, away_pitcher_hand,
-                home_batters, home_team, engine, odds_lookup, pf, weather
-            )
+            st.markdown(f'<div class="section-header">{away_pitcher_name} → {home_team} BATTERS</div>', unsafe_allow_html=True)
+            if precomputed:
+                # Use pre-computed scores
+                home_results = g.get("home_batters", [])
+                render_precomputed_lineup(away_pitcher_name, away_pitcher_hand, home_results, g, weather, pf)
+            else:
+                home_results = render_lineup_section(
+                    away_pitcher_name, away_pitcher_id, away_pitcher_hand,
+                    home_batters, home_team, engine, odds_lookup, pf, weather
+                )
 
         with right_col:
-            st.markdown(f'<div class="section-header">{home_pitcher_name} → {away_team} BATTERS</div>',
-                       unsafe_allow_html=True)
-            away_results = render_lineup_section(
-                f"{home_pitcher_name} vs {away_team}",
-                home_pitcher_name, home_pitcher_id, home_pitcher_hand,
-                away_batters, home_team, engine, odds_lookup, pf, weather
-            )
+            st.markdown(f'<div class="section-header">{home_pitcher_name} → {away_team} BATTERS</div>', unsafe_allow_html=True)
+            if precomputed:
+                away_results = g.get("away_batters", [])
+                render_precomputed_lineup(home_pitcher_name, home_pitcher_hand, away_results, g, weather, pf)
+            else:
+                away_results = render_lineup_section(
+                    home_pitcher_name, home_pitcher_id, home_pitcher_hand,
+                    away_batters, home_team, engine, odds_lookup, pf, weather
+                )
 
     # ── TAB 2: Zone Maps ───────────────────────────────────────────────────────
     with tab2:
@@ -684,12 +763,12 @@ def main():
                 pitcher_id   = away_pitcher_id if is_home else home_pitcher_id
                 pitcher_name = g.get("away_pitcher","TBD") if is_home else g.get("home_pitcher","TBD")
 
-                hit_data = engine.compute_hit_score(bid, pitcher_id or 0, park_factor=pf)
+                hit_data = engine.compute_algo_score(bid, pitcher_id or 0, park_factor=pf)
                 zone_data = engine.compute_zone_fit(bid, pitcher_id or 0)
 
                 # Stats row
                 m1,m2,m3,m4,m5,m6 = st.columns(6)
-                m1.metric("HIT Score", f"{hit_data['hit_score']:.0f}/100")
+                m1.metric("ALGO Score", f"{hit_data['algo_score']:.0f}/100")
                 m2.metric("Grade", hit_data["grade"])
                 m3.metric("Zone Count", f"⚡{zone_data['zone_count']}")
                 m4.metric("Zone Fit", f"{zone_data['zone_fit']*100:.0f}%")
@@ -711,20 +790,23 @@ def main():
                 # Score breakdown
                 st.markdown("#### Score Breakdown")
                 breakdown = pd.DataFrame({
-                    "Component": ["Barrel","Hard Hit","xwOBA","LA%","Exit Velo","Pull","Pitcher","Platoon","Env","Hot Bat"],
+                    "Component": ["Barrel","Hard Hit","xwOBA","LA%","FB%","HR/FB","EV","Pull","SwStr","Pitcher","Platoon","Env","Hot Bat"],
                     "Score": [
                         hit_data.get("barrel_score", 0),
                         hit_data.get("hh_score", 0),
                         hit_data.get("xwoba_score", 0),
                         hit_data.get("la_score", 0),
+                        hit_data.get("fb_score", 0),
+                        hit_data.get("hrfb_score", 0),
                         hit_data.get("ev_score", 0),
                         hit_data.get("pull_score", 0),
+                        hit_data.get("swstr_bonus", 0),
                         hit_data.get("pitcher_score", 0),
                         hit_data.get("platoon_score", 0),
                         hit_data.get("env_score", 0),
                         hit_data.get("form_score", 0),
                     ],
-                    "Max": [18, 12, 12, 10, 8, 5, 20, 10, 10, 5],
+                    "Max": [18, 12, 10, 8, 7, 8, 6, 4, 5, 20, 10, 10, 5],
                 })
                 breakdown["Pct"] = breakdown["Score"] / breakdown["Max"]
                 fig = px.bar(breakdown, x="Component", y="Score", color="Pct",
@@ -834,14 +916,14 @@ def main():
                 opp_hand = away_pitcher_hand if is_home else home_pitcher_hand
 
                 if engine and opp_pid:
-                    hit_data = engine.compute_hit_score(
+                    hit_data = engine.compute_algo_score(
                         pid, opp_pid, hand.get("bat_side","R"), opp_hand,
                         park_factor=pf, wind_boost=0 if is_dome else weather.get("wind_mph",0)*0.1,
                         temp_f=weather.get("temp_f",70),
                         hr_odds=odds_lookup.get(name.lower())
                     )
                 else:
-                    hit_data = {"hit_score":0,"grade":"MODERATE","proj_hr_pct":5,"barrel_rate":0,"avg_ev":0}
+                    hit_data = {"algo_score":0,"grade":"MODERATE","proj_hr_pct":5,"barrel_rate":0,"avg_ev":0}
 
                 odds = odds_lookup.get(name.lower())
                 legs.append({**hit_data, "player_name": name, "odds": odds})
@@ -854,7 +936,7 @@ def main():
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <div>
                             <span style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem">{leg['player_name']}</span>
-                            <span style="font-size:.72rem;color:#475569;margin-left:8px">{leg.get('grade','—')} · HIT {leg.get('hit_score',0):.0f}</span>
+                            <span style="font-size:.72rem;color:#475569;margin-left:8px">{leg.get('grade','—')} · ALGO {leg.get('algo_score',0):.0f}</span>
                         </div>
                         <span class="odds-display">{odds_str}</span>
                     </div>
