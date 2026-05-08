@@ -1,0 +1,41 @@
+[
+  {
+    "post_retrain_auc": 0.6812,
+    "post_retrain_brier": 0.0973,
+    "training_samples": 46998
+  },
+  {
+    "date": "2026-04-07",
+    "n_samples": 1841,
+    "hr_rate": 0.09722976643128735,
+    "auc": 0.7633,
+    "brier": 0.0819,
+    "calibration_error": 0.1383,
+    "mean_predicted_prob": 0.1018,
+    "post_retrain_auc": 0.6799,
+    "post_retrain_brier": 0.0973,
+    "training_samples": 46970
+  },
+  {
+    "date": "2026-04-07",
+    "n_samples": 1780,
+    "hr_rate": 0.09943820224719101,
+    "auc": 0.7894,
+    "brier": 0.0821,
+    "calibration_error": 0.147,
+    "mean_predicted_prob": 0.1043,
+    "post_retrain_auc": 0.68,
+    "post_retrain_brier": 0.0973,
+    "training_samples": 46970
+  },
+  {
+    "post_retrain_auc": 0.68,
+    "post_retrain_brier": 0.0973,
+    "training_samples": 46970
+  },
+  {
+    "post_retrain_auc": 0.6828,
+    "post_retrain_brier": 0.0962,
+    "training_samples": 53058
+  }
+]
