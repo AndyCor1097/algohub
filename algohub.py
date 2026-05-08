@@ -676,6 +676,66 @@ def main():
 
     st.divider()
 
+    # ── Top 5 Slate Strip ──────────────────────────────────────────────────────
+    if precomputed:
+        all_batters = []
+        for g_item in games:
+            for b in g_item.get("home_batters", []) + g_item.get("away_batters", []):
+                b["game"] = f"{g_item['away_team']} @ {g_item['home_team']}"
+                b["pitcher"] = g_item.get("away_pitcher","TBD") if b in g_item.get("home_batters",[]) else g_item.get("home_pitcher","TBD")
+                all_batters.append(b)
+
+        top5 = sorted(all_batters, key=lambda x: x.get("hit_score", 0), reverse=True)[:5]
+
+        if top5:
+            st.markdown("#### 🔥 TOP PLAYS TODAY")
+            t_cols = st.columns(5)
+            for i, b in enumerate(top5):
+                with t_cols[i]:
+                    score = b.get("hit_score", 0)
+                    grade = b.get("grade", "MODERATE").lower()
+                    brl   = b.get("barrel_rate", 0)
+                    ev    = b.get("avg_ev", 0)
+                    zf    = b.get("zone_fit", 0)
+                    hr_r  = b.get("hr_rate", 0)
+                    bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r)
+                    top_color = "#ef4444" if score >= 65 else "#f59e0b" if score >= 50 else "#3b82f6"
+                    st.markdown(f"""
+                    <div style="background:#0c1018;border:1px solid #1c2333;border-top:2px solid {top_color};border-radius:8px;padding:10px 12px;">
+                        <div style="font-family:'Bebas Neue',sans-serif;font-size:.95rem;letter-spacing:.05em">{b.get('player_name','—')} {bat_icon}</div>
+                        <div style="font-size:.65rem;color:#475569;margin:2px 0 6px;font-family:'DM Mono',monospace">{b.get('game','')}</div>
+                        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.6rem;color:{top_color}">{score:.0f}</div>
+                        <div style="font-size:.68rem;color:#94a3b8;font-family:'DM Mono',monospace">
+                            ZF {zf:.3f} · BBL {brl:.1f}% · EV {ev:.1f}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Color Legend ───────────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="display:flex;gap:20px;align-items:center;padding:6px 10px;background:#0c1018;border:1px solid #1c2333;border-radius:6px;margin-bottom:12px;flex-wrap:wrap;">
+        <span style="font-family:'DM Mono',monospace;font-size:.65rem;color:#475569;letter-spacing:.1em">LEGEND</span>
+        <span style="font-size:.7rem;color:#475569">ALGO:</span>
+        <span style="font-size:.7rem"><span style="color:#ef4444">■</span> <span style="color:#94a3b8">65+ Elite</span></span>
+        <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">50-64 Strong</span></span>
+        <span style="font-size:.7rem"><span style="color:#3b82f6">■</span> <span style="color:#94a3b8">35-49 Moderate</span></span>
+        <span style="font-size:.7rem;color:#475569;margin-left:8px">BBL%:</span>
+        <span style="font-size:.7rem"><span style="color:#22c55e">■</span> <span style="color:#94a3b8">15%+</span></span>
+        <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">8-14%</span></span>
+        <span style="font-size:.7rem;color:#475569;margin-left:8px">EV:</span>
+        <span style="font-size:.7rem"><span style="color:#22c55e">■</span> <span style="color:#94a3b8">92+</span></span>
+        <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">88-91</span></span>
+        <span style="font-size:.7rem;color:#475569;margin-left:8px">xwOBA:</span>
+        <span style="font-size:.7rem"><span style="color:#22c55e">■</span> <span style="color:#94a3b8">.360+</span></span>
+        <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">.300-.359</span></span>
+        <span style="font-size:.7rem;color:#475569;margin-left:8px">🔥 Hot</span>
+        <span style="font-size:.7rem;color:#475569">🌡️ Warm</span>
+        <span style="font-size:.7rem;color:#475569">❄️ Cold</span>
+    </div>
+    """, unsafe_allow_html=True)
+
     # ── Selected game ──────────────────────────────────────────────────────────
     g = games[selected_game_idx]
     home_team = g.get("home_team","")
