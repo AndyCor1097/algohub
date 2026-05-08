@@ -274,7 +274,7 @@ def load_statcast_engine():
     """Load bulk Statcast data and build ALGO Score engine."""
     try:
         import pybaseball as pb
-        from algo_score import HITScoreEngine
+        from hit_score import HITScoreEngine
         pb.cache.enable()
         end   = datetime.today()
         start = end - timedelta(days=30)
@@ -469,7 +469,7 @@ def build_overlap_fig(batter_zones: dict, pitcher_zones: dict, height=180):
 def render_batter_row(rank, player, hit_data, odds=None):
     name    = player.get("player_name", "—")
     grade   = hit_data.get("grade", "MODERATE").lower()
-    score   = hit_data.get("algo_score", 0)
+    score   = hit_data.get("hit_score", 0)
     brl     = hit_data.get("barrel_rate", 0)
     ev      = hit_data.get("avg_ev", 0)
     hr_r    = hit_data.get("hr_rate", 0)
@@ -597,7 +597,7 @@ def render_lineup_section(pitcher_name, pitcher_id, pitcher_hand, batters, home_
 
         if engine:
             p_stats = load_pitcher_stats(pitcher_id) if pitcher_id else {}
-            hit_data = engine.compute_algo_score(
+            hit_data = engine.compute_hit_score(
                 batter_id    = pid,
                 pitcher_id   = pitcher_id or 0,
                 bat_side     = bat_side,
@@ -610,7 +610,7 @@ def render_lineup_section(pitcher_name, pitcher_id, pitcher_hand, batters, home_
                 pitcher_hrfb = p_stats.get("hrfb", 0.12),
             )
         else:
-            hit_data = {"algo_score": 0, "grade": "MODERATE", "barrel_rate": 0,
+            hit_data = {"hit_score": 0, "grade": "MODERATE", "barrel_rate": 0,
                        "avg_ev": 0, "hr_rate": 0, "zone_count": 0, "proj_hr_pct": 0}
 
         hit_data["player_name"] = player.get("player_name","")
@@ -619,7 +619,7 @@ def render_lineup_section(pitcher_name, pitcher_id, pitcher_hand, batters, home_
         results.append(hit_data)
 
     # Sort by ALGO Score
-    results.sort(key=lambda x: x.get("algo_score", 0), reverse=True)
+    results.sort(key=lambda x: x.get("hit_score", 0), reverse=True)
 
     for i, r in enumerate(results):
         render_batter_row(i+1, r, r)
@@ -763,12 +763,12 @@ def main():
                 pitcher_id   = away_pitcher_id if is_home else home_pitcher_id
                 pitcher_name = g.get("away_pitcher","TBD") if is_home else g.get("home_pitcher","TBD")
 
-                hit_data = engine.compute_algo_score(bid, pitcher_id or 0, park_factor=pf)
+                hit_data = engine.compute_hit_score(bid, pitcher_id or 0, park_factor=pf)
                 zone_data = engine.compute_zone_fit(bid, pitcher_id or 0)
 
                 # Stats row
                 m1,m2,m3,m4,m5,m6 = st.columns(6)
-                m1.metric("ALGO Score", f"{hit_data['algo_score']:.0f}/100")
+                m1.metric("ALGO Score", f"{hit_data['hit_score']:.0f}/100")
                 m2.metric("Grade", hit_data["grade"])
                 m3.metric("Zone Count", f"⚡{zone_data['zone_count']}")
                 m4.metric("Zone Fit", f"{zone_data['zone_fit']*100:.0f}%")
@@ -916,14 +916,14 @@ def main():
                 opp_hand = away_pitcher_hand if is_home else home_pitcher_hand
 
                 if engine and opp_pid:
-                    hit_data = engine.compute_algo_score(
+                    hit_data = engine.compute_hit_score(
                         pid, opp_pid, hand.get("bat_side","R"), opp_hand,
                         park_factor=pf, wind_boost=0 if is_dome else weather.get("wind_mph",0)*0.1,
                         temp_f=weather.get("temp_f",70),
                         hr_odds=odds_lookup.get(name.lower())
                     )
                 else:
-                    hit_data = {"algo_score":0,"grade":"MODERATE","proj_hr_pct":5,"barrel_rate":0,"avg_ev":0}
+                    hit_data = {"hit_score":0,"grade":"MODERATE","proj_hr_pct":5,"barrel_rate":0,"avg_ev":0}
 
                 odds = odds_lookup.get(name.lower())
                 legs.append({**hit_data, "player_name": name, "odds": odds})
@@ -936,7 +936,7 @@ def main():
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <div>
                             <span style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem">{leg['player_name']}</span>
-                            <span style="font-size:.72rem;color:#475569;margin-left:8px">{leg.get('grade','—')} · ALGO {leg.get('algo_score',0):.0f}</span>
+                            <span style="font-size:.72rem;color:#475569;margin-left:8px">{leg.get('grade','—')} · ALGO {leg.get('hit_score',0):.0f}</span>
                         </div>
                         <span class="odds-display">{odds_str}</span>
                     </div>
