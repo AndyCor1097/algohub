@@ -503,41 +503,41 @@ class HITScoreEngine:
         pitch = self.compute_pitch_matchup(batter_id, pitcher_id)
 
         # ── Batter signals ────────────────────────────────────────────────────
+        # Thresholds set so league avg scores ~40-45, elite scores ~70-80
 
-        # 1. Barrel rate (18pts)
-        barrel     = b.get("barrel_rate", 0)
-        barrel_score = min(barrel / 0.20, 1.0) * 18
+        # 1. Barrel rate (15pts) — elite = 18%+, avg = 8%
+        barrel = b.get("barrel_rate", 0)
+        barrel_score = min(max((barrel - 0.04) / 0.18, 0), 1.0) * 15
 
-        # 2. Hard hit % (12pts)
-        hard_hit   = b.get("hard_hit", 0)
-        hh_score   = min(hard_hit / 0.55, 1.0) * 12
+        # 2. Hard hit % (10pts) — elite = 55%+, avg = 38%
+        hard_hit = b.get("hard_hit", 0)
+        hh_score = min(max((hard_hit - 0.30) / 0.30, 0), 1.0) * 10
 
-        # 3. xwOBA (10pts) — true contact quality
+        # 3. xwOBA (10pts) — elite = .400+, avg = .310
         xwoba = b.get("xwoba") or 0.300
-        xwoba_score = min(max((xwoba - 0.250) / 0.200, 0), 1.0) * 10
+        xwoba_score = min(max((xwoba - 0.280) / 0.150, 0), 1.0) * 10
 
-        # 4. Launch angle consistency (8pts) — % in 15-35 degree HR window
+        # 4. Launch angle % (6pts) — elite = 40%+, avg = 25%
         la_cons = b.get("la_consistency", 0)
-        la_score = min(la_cons / 0.45, 1.0) * 8
+        la_score = min(max((la_cons - 0.15) / 0.30, 0), 1.0) * 6
 
-        # 5. FB% (7pts) — direct fly ball rate
-        fb_rate  = b.get("fb_rate", 0)
-        fb_score = min(fb_rate / 0.40, 1.0) * 7
+        # 5. FB% (5pts) — elite = 45%+, avg = 30%
+        fb_rate = b.get("fb_rate", 0)
+        fb_score = min(max((fb_rate - 0.20) / 0.25, 0), 1.0) * 5
 
-        # 6. HR/FB (8pts) — how often fly balls become HRs
+        # 6. HR/FB (7pts) — elite = 20%+, avg = 10%
         hr_fb = b.get("hr_fb_rate", 0)
-        hrfb_score = min(hr_fb / 0.20, 1.0) * 8
+        hrfb_score = min(max((hr_fb - 0.05) / 0.18, 0), 1.0) * 7
 
-        # 7. Exit velo (6pts)
-        avg_ev     = b.get("avg_ev", 85)
-        ev_score   = min(max((avg_ev - 82) / 16, 0), 1.0) * 6
+        # 7. Exit velo (5pts) — elite = 95mph+, avg = 88mph
+        avg_ev = b.get("avg_ev", 85)
+        ev_score = min(max((avg_ev - 86) / 12, 0), 1.0) * 5
 
-        # 8. Pull rate bonus (4pts) — pull hitters in favorable parks
-        pull_rate  = b.get("pulled_rate", 0)
-        pull_score = min(pull_rate / 0.55, 1.0) * 4 * min(park_factor / 1.05, 1.0)
+        # 8. Pull rate (3pts) — weighted by park
+        pull_rate = b.get("pulled_rate", 0)
+        pull_score = min(max((pull_rate - 0.30) / 0.25, 0), 1.0) * 3 * min(park_factor / 1.05, 1.0)
 
-        # SwStr% matchup bonus (up to +5)
-        # Low batter SwStr% vs pitcher's primary pitch = cleaner contact = more HRs
+        # SwStr% matchup bonus (up to +4)
         swstr_bonus = 0.0
         swstr_by_pt = b.get("swstr_by_pt", {})
         primary_pitch = p.get("primary_pitch") if p else None
@@ -546,39 +546,37 @@ class HITScoreEngine:
             batter_swstr = swstr_by_pt.get(pt_group, b.get("swstr_rate", 0.10))
         else:
             batter_swstr = b.get("swstr_rate", 0.10)
-        # Elite contact: <5% SwStr. Avg: ~10%. Poor: >15%
-        swstr_bonus = min(max((0.15 - batter_swstr) / 0.10, 0), 1.0) * 5
+        swstr_bonus = min(max((0.12 - batter_swstr) / 0.08, 0), 1.0) * 4
 
         # ── Pitcher signals ───────────────────────────────────────────────────
 
-        # 5. Pitcher HR vulnerability (20pts)
-        # Use passed-in stats (from MLB API) or fall back to Statcast data
-        p_hr9   = p.get("hr_per_fb", pitcher_hrfb) if p else pitcher_hrfb
-        p_era   = pitcher_era
-        p_hard  = p.get("hard_hit_allowed", pitcher_hard) if p else pitcher_hard
+        # Pitcher HR vulnerability (18pts) — elite = ERA 5.5+, avg = 4.2
+        p_hr9  = p.get("hr_per_fb", pitcher_hrfb) if p else pitcher_hrfb
+        p_era  = pitcher_era
+        p_hard = p.get("hard_hit_allowed", pitcher_hard) if p else pitcher_hard
 
-        era_score  = min(max((p_era - 2.0) / 6.0, 0), 1.0) * 8
-        hr9_score  = min(p_hr9 / 0.20, 1.0) * 7
-        hard_score = min(p_hard / 0.45, 1.0) * 5
+        era_score  = min(max((p_era - 3.50) / 3.0, 0), 1.0) * 8
+        hr9_score  = min(max((p_hr9 - 0.08) / 0.14, 0), 1.0) * 6
+        hard_score = min(max((p_hard - 0.30) / 0.18, 0), 1.0) * 4
         pitcher_score = era_score + hr9_score + hard_score
 
-        # ── Platoon (10pts) ───────────────────────────────────────────────────
+        # ── Platoon (8pts) ────────────────────────────────────────────────────
         platoon_mult  = PLATOON_MULT.get((bat_side, pitch_hand), 1.0)
-        platoon_score = (platoon_mult - 0.88) / (1.12 - 0.88) * 10
+        platoon_score = (platoon_mult - 0.88) / (1.12 - 0.88) * 8
 
-        # ── Environment (10pts) ───────────────────────────────────────────────
-        park_score = min(max((park_factor - 0.85) / 0.4, 0), 1.0) * 5
-        wind_score = min(max(wind_boost / 15, 0), 1.0) * 3
-        temp_score = min(max((temp_f - 60) / 35, 0), 1.0) * 2
+        # ── Environment (8pts) ───────────────────────────────────────────────
+        park_score = min(max((park_factor - 0.90) / 0.35, 0), 1.0) * 4
+        wind_score = min(max(wind_boost / 12, 0), 1.0) * 3
+        temp_score = min(max((temp_f - 65) / 25, 0), 1.0) * 1
         env_score  = park_score + wind_score + temp_score
 
-        # ── Hot bat (5pts) ────────────────────────────────────────────────────
+        # ── Hot bat (4pts) ────────────────────────────────────────────────────
         hr_rate    = b.get("hr_rate", 0)
-        form_score = min(hr_rate / 0.25, 1.0) * 5
+        form_score = min(max((hr_rate - 0.05) / 0.20, 0), 1.0) * 4
 
-        # ── Zone bonus (up to +10 bonus on top) ───────────────────────────────
+        # ── Zone bonus (up to +8) ─────────────────────────────────────────────
         zone_count = zone.get("zone_count", 0)
-        zone_bonus = min(zone_count * 2, 10)
+        zone_bonus = min(zone_count * 1.5, 8)
 
         # ── Composite ─────────────────────────────────────────────────────────
         base_score = (barrel_score + hh_score + xwoba_score + la_score +
@@ -587,9 +585,9 @@ class HITScoreEngine:
         hit_score  = round(min(base_score + zone_bonus + swstr_bonus, 100), 1)
 
         # ── Grade ─────────────────────────────────────────────────────────────
-        if hit_score >= 70:   grade = "ELITE"
-        elif hit_score >= 55: grade = "STRONG"
-        elif hit_score >= 40: grade = "MODERATE"
+        if hit_score >= 65:   grade = "ELITE"
+        elif hit_score >= 50: grade = "STRONG"
+        elif hit_score >= 35: grade = "MODERATE"
         else:                 grade = "FADE"
 
         # ── Projected HR% ─────────────────────────────────────────────────────

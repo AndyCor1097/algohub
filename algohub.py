@@ -806,7 +806,7 @@ def main():
                         hit_data.get("env_score", 0),
                         hit_data.get("form_score", 0),
                     ],
-                    "Max": [18, 12, 10, 8, 7, 8, 6, 4, 5, 20, 10, 10, 5],
+                    "Max": [15, 10, 10, 6, 5, 7, 5, 3, 4, 18, 8, 8, 4],
                 })
                 breakdown["Pct"] = breakdown["Score"] / breakdown["Max"]
                 fig = px.bar(breakdown, x="Component", y="Score", color="Pct",
