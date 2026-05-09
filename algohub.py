@@ -14,7 +14,16 @@ import requests
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Eastern Time helper
+def et_now():
+    """Current time in US Eastern (handles EST/EDT automatically via -4 offset for EDT)."""
+    et = timezone(timedelta(hours=-4))
+    return datetime.now(et)
+
+def et_today():
+    return et_now().strftime("%Y-%m-%d")
 
 st.set_page_config(
     page_title="AlgoHub",
@@ -170,7 +179,7 @@ def load_precomputed():
         with open(path) as f:
             data = json.load(f)
         # Check if it's from today
-        if data.get("date") == datetime.today().strftime("%Y-%m-%d"):
+        if data.get("date") == et_today():
             return data
         return None
     except:
@@ -180,7 +189,7 @@ def load_precomputed():
 @st.cache_data(ttl=60)
 def load_schedule():
     """Load today's MLB schedule from MLB Stats API."""
-    today = datetime.today().strftime("%Y-%m-%d")
+    today = et_today()
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}&hydrate=probablePitcher,lineScore,team"
     try:
         r = requests.get(url, timeout=10)
@@ -635,7 +644,7 @@ def main():
     with col_logo:
         st.markdown('<div class="ah-logo">ALGO<span>HUB</span></div><div class="ah-tagline">HR Intelligence Platform</div>', unsafe_allow_html=True)
     with col_date:
-        st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:.8rem;color:#475569;padding-top:12px">{datetime.today().strftime("%A, %B %d %Y")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:.8rem;color:#475569;padding-top:12px">{et_now().strftime("%A, %B %d %Y")}</div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 

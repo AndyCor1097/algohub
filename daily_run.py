@@ -16,7 +16,12 @@ import sys
 import requests
 import pybaseball as pb
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Eastern Time helper
+_ET = timezone(timedelta(hours=-4))
+def et_now(): return datetime.now(_ET)
+def et_today(): return et_now().strftime("%Y-%m-%d")
 
 pb.cache.enable()
 
@@ -48,7 +53,7 @@ def log(msg): print(f"  {msg}")
 
 # ── Schedule ───────────────────────────────────────────────────────────────────
 def get_schedule():
-    today = datetime.today().strftime("%Y-%m-%d")
+    today = et_today()
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today}&hydrate=probablePitcher,team"
     try:
         r = requests.get(url, timeout=10)
@@ -125,7 +130,7 @@ _pitcher_stats_cache = {}
 def get_pitcher_stats(pitcher_id: int) -> dict:
     if not pitcher_id: return {"era": 4.50, "hr9": 1.10, "hrfb": 0.12}
     if pitcher_id in _pitcher_stats_cache: return _pitcher_stats_cache[pitcher_id]
-    season = datetime.today().year
+    season = et_now().year
     url = f"https://statsapi.mlb.com/api/v1/people/{pitcher_id}/stats?stats=season&season={season}&group=pitching"
     try:
         r = requests.get(url, timeout=8)
@@ -203,14 +208,14 @@ def get_weather(venue: str, is_dome: bool) -> dict:
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print(f"  AlgoHub Daily Run — {datetime.today().strftime('%A, %B %d %Y')}")
+    print(f"  AlgoHub Daily Run — {et_now().strftime('%A, %B %d %Y')}")
     print("=" * 60)
 
     os.makedirs("data", exist_ok=True)
 
     # 1. Build HIT Score engine
     print("\n[1/5] Loading Statcast data (30 days)...")
-    end   = datetime.today()
+    end   = et_now()
     start = end - timedelta(days=30)
     raw = pb.statcast(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
     log(f"Got {len(raw):,} pitch records")
@@ -322,7 +327,7 @@ def main():
     # 4. Save to JSON
     print("\n[4/5] Saving data...")
     output = {
-        "date":       datetime.today().strftime("%Y-%m-%d"),
+        "date":       et_today(),
         "generated":  datetime.now().isoformat(),
         "games":      output_games,
     }
@@ -334,7 +339,7 @@ def main():
     print("\n[5/5] Pushing to GitHub...")
     try:
         subprocess.run(["git", "add", OUTPUT_PATH], check=True)
-        subprocess.run(["git", "commit", "-m", f"Daily data {datetime.today().strftime('%Y-%m-%d')}"], check=True)
+        subprocess.run(["git", "commit", "-m", f"Daily data {et_now().strftime('%Y-%m-%d')}"], check=True)
         subprocess.run(["git", "push"], check=True)
         log("Pushed to GitHub ✓")
     except subprocess.CalledProcessError as e:
