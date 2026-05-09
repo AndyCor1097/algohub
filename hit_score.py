@@ -268,6 +268,50 @@ class HITScoreEngine:
                 la_num = pd.to_numeric(grp["launch_angle"], errors="coerce")
                 la_consistency = float(((la_num >= 15) & (la_num <= 35)).fillna(False).mean())
 
+            # ── Rolling 7-day trending stats ──────────────────────────────────
+            # Compare last 7 days vs full sample to detect heating up / cooling down
+            cutoff_7 = grp["game_date"].max() - pd.Timedelta(days=7) if "game_date" in grp.columns else None
+            if cutoff_7 is not None:
+                recent = grp[grp["game_date"] >= cutoff_7]
+            else:
+                recent = grp.tail(10)
+
+            # Recent barrel rate (last 7 days)
+            barrel_7 = float(recent["barrel"].mean()) if len(recent) >= 3 else float(grp["barrel"].mean())
+
+            # Recent hard hit % (last 7 days)
+            hh_7 = float(recent["hard_hit"].mean()) if "hard_hit" in recent.columns and len(recent) >= 3 else float(grp.get("hard_hit", pd.Series([0])).mean())
+
+            # Recent xwOBA (last 7 days)
+            xwoba_7 = None
+            if "estimated_woba_using_speedangle" in recent.columns and len(recent) >= 3:
+                xwoba_7 = float(pd.to_numeric(recent["estimated_woba_using_speedangle"], errors="coerce").fillna(0).mean())
+
+            # Recent EV (last 7 days)
+            ev_7 = float(pd.to_numeric(recent["launch_speed"], errors="coerce").fillna(0).mean()) if "launch_speed" in recent.columns and len(recent) >= 3 else 0
+
+            # Season averages for comparison
+            barrel_season = float(grp["barrel"].mean())
+            hh_season     = float(grp["hard_hit"].mean()) if "hard_hit" in grp.columns else 0
+            xwoba_season  = float(pd.to_numeric(grp["estimated_woba_using_speedangle"], errors="coerce").fillna(0).mean()) if "estimated_woba_using_speedangle" in grp.columns else 0.300
+            ev_season     = float(pd.to_numeric(grp["launch_speed"], errors="coerce").fillna(0).mean()) if "launch_speed" in grp.columns else 85
+
+            # Trend scores — positive = heating up, negative = cooling down
+            # Scale so +0.10 = 10% above avg
+            barrel_trend = (barrel_7 - barrel_season) / max(barrel_season, 0.01)
+            hh_trend     = (hh_7 - hh_season) / max(hh_season, 0.01)
+            xwoba_trend  = ((xwoba_7 or xwoba_season) - xwoba_season) / max(xwoba_season, 0.01)
+            ev_trend     = (ev_7 - ev_season) / max(ev_season, 0.01)
+
+            # Composite heat score — weighted average of trends
+            heat_score = (
+                barrel_trend * 0.35 +
+                hh_trend     * 0.25 +
+                xwoba_trend  * 0.25 +
+                ev_trend     * 0.15
+            )
+            heat_score = round(float(heat_score), 3)
+
             # Fly ball % — direct from bb_type
             fb_rate = 0.0
             if "bb_type" in grp.columns:
@@ -294,6 +338,13 @@ class HITScoreEngine:
                 "barrel_rate":    float(grp["barrel"].mean()),
                 "sweet_spot":     float(grp["sweet_spot"].mean()) if "sweet_spot" in grp.columns else 0,
                 "la_consistency": la_consistency,
+                "heat_score":     heat_score,
+                "barrel_7":       round(barrel_7 * 100, 1),
+                "hh_7":           round(hh_7 * 100, 1),
+                "xwoba_7":        round(xwoba_7, 3) if xwoba_7 else None,
+                "ev_7":           round(ev_7, 1),
+                "barrel_trend":   round(barrel_trend, 3),
+                "hh_trend":       round(hh_trend, 3),
                 "fb_rate":        fb_rate,
                 "hr_fb_rate":     hr_fb_rate,
                 "iso_proxy":      round(iso_proxy, 3),
@@ -570,9 +621,12 @@ class HITScoreEngine:
         temp_score = min(max((temp_f - 65) / 25, 0), 1.0) * 1
         env_score  = park_score + wind_score + temp_score
 
-        # ── Hot bat (4pts) ────────────────────────────────────────────────────
+        # ── Hot bat (5pts) — HR rate + Statcast trending ─────────────────────
         hr_rate    = b.get("hr_rate", 0)
-        form_score = min(max((hr_rate - 0.05) / 0.20, 0), 1.0) * 4
+        heat_score_val = b.get("heat_score", 0)
+        # HR rate component (2.5pts) + trending component (2.5pts)
+        form_score = min(max((hr_rate - 0.05) / 0.20, 0), 1.0) * 2.5 + \
+                     min(max(heat_score_val / 0.25, 0), 1.0) * 2.5
 
         # ── Zone bonus (up to +8) ─────────────────────────────────────────────
         zone_count = zone.get("zone_count", 0)
@@ -658,6 +712,12 @@ class HITScoreEngine:
             "avg_ev":         round(avg_ev, 1),
             "avg_la":         round(b.get("avg_la", 0), 1),
             "hr_rate":        round(hr_rate * 100, 2),
+            "heat_score":     round(heat_score_val, 3),
+            "barrel_7":       b.get("barrel_7", 0),
+            "hh_7":           b.get("hh_7", 0),
+            "xwoba_7":        b.get("xwoba_7"),
+            "ev_7":           b.get("ev_7", 0),
+            "barrel_trend":   b.get("barrel_trend", 0),
             "bip":            b.get("bip", 0) if b else 0,
 
             # Pitcher raw stats

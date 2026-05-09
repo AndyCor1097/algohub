@@ -297,6 +297,11 @@ def main():
                     "edge_pitch":     hit_data["edge_pitch"],
                     "pitch_matchup":  hit_data["weighted_barrel"],
                     "platoon_score":  hit_data["platoon_score"],
+                    "heat_score":     hit_data.get("heat_score", 0),
+                    "barrel_7":       hit_data.get("barrel_7", 0),
+                    "hh_7":           hit_data.get("hh_7", 0),
+                    "xwoba_7":        hit_data.get("xwoba_7"),
+                    "ev_7":           hit_data.get("ev_7", 0),
                 })
             results.sort(key=lambda x: x["hit_score"], reverse=True)
             return results

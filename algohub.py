@@ -407,10 +407,19 @@ DOME_PARKS = {"TBR","TOR","HOU","MIA","ARI","MIL","ATH","TEX"}
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def hot_bat(hr_rate):
-    if hr_rate >= 0.25:   return "🔥", "hot"
-    elif hr_rate >= 0.10: return "🌡️", "warm"
-    else:                 return "❄️", "cold"
+def hot_bat(hr_rate, heat_score=0):
+    """
+    Determines hot/warm/cold based on HR rate AND Statcast trending.
+    heat_score > 0.15 = heating up even without recent HRs.
+    """
+    if hr_rate >= 0.25 or heat_score >= 0.20:
+        return "🔥", "hot"
+    elif hr_rate >= 0.10 or heat_score >= 0.08:
+        return "🌡️", "warm"
+    elif heat_score <= -0.15:
+        return "❄️", "cold"
+    else:
+        return "◆", "neutral"
 
 
 def color_stat(val, low, high):
@@ -492,7 +501,8 @@ def render_batter_row(rank, player, hit_data, odds=None):
     proj    = hit_data.get("proj_hr_pct", 0)
     edge    = hit_data.get("edge_pitch", "")
     bat_side = hit_data.get("bat_side", "R")
-    bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r)
+    heat = hit_data.get("heat_score", 0)
+    bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r, heat)
     edge_str = {"fb":"🔥 FB","brk":"🌀 BRK","off":"🎯 OFF"}.get(edge or "","")
     hand_str = f"<span style='font-size:.65rem;color:#475569'>{bat_side}HB</span>"
     hh    = hit_data.get("hard_hit_pct", 0)
@@ -738,7 +748,8 @@ def main():
                 ev    = b.get("avg_ev", 0)
                 zf    = b.get("zone_fit", 0)
                 hr_r  = b.get("hr_rate", 0)
-                bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r)
+                heat  = b.get("heat_score", 0)
+                bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r, heat)
                 top_color = "#ef4444" if score >= 65 else "#f59e0b" if score >= 50 else "#3b82f6"
                 st.markdown(f"""
                 <div style="background:#0c1018;border:1px solid #1c2333;border-top:2px solid {top_color};border-radius:8px;padding:10px 12px;">
