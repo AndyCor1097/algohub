@@ -545,6 +545,12 @@ def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather
     elif pitcher_bip < 50:
         data_warning = f' <span style="color:#f59e0b;font-size:.7rem">⚠️ Limited data ({pitcher_bip} BIP)</span>'
 
+    data_warning_html = ""
+    if pitcher_bip == 0:
+        data_warning_html = "⚠️ No pitcher data"
+    elif pitcher_bip < 50:
+        data_warning_html = f"⚠️ Limited data ({pitcher_bip} BIP)"
+
     st.markdown(f"""
     <div class="pitcher-card">
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -553,7 +559,7 @@ def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather
                 <span class="pitcher-name">{pitcher_name}</span>
                 <span style="font-size:.75rem;color:#475569;margin-left:8px">{'LHP' if pitcher_hand=='L' else 'RHP'}</span>
                 <span style="font-size:.72rem;color:#94a3b8;margin-left:8px;font-family:'DM Mono',monospace">ERA {era:.2f}</span>
-                {data_warning}
+                <span style="color:#f59e0b;font-size:.7rem;margin-left:6px">{data_warning_html}</span>
             </div>
             <div style="text-align:right;font-family:'DM Mono',monospace;font-size:.72rem;color:#475569">
                 PF {pf:.2f} &nbsp;|&nbsp; {wind_str}
