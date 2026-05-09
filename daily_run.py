@@ -330,6 +330,8 @@ def main():
             "away_pitcher_hand":  away_pitcher_hand,
             "home_pitcher_era":   home_p_stats["era"],
             "away_pitcher_era":   away_p_stats["era"],
+            "home_pitcher_bip":   engine._pitcher_index.get(int(home_pitcher_id), {}).get("bip", 0) if home_pitcher_id and engine else 0,
+            "away_pitcher_bip":   engine._pitcher_index.get(int(away_pitcher_id), {}).get("bip", 0) if away_pitcher_id and engine else 0,
             # home batters face away pitcher
             "home_batters":       home_scored,
             # away batters face home pitcher

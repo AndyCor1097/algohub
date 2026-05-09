@@ -537,16 +537,13 @@ def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather
     wind_str = "🏟️ DOME" if is_dome else game.get("weather", {}).get("wind_label", "")
     era = game.get("home_pitcher_era", 4.50) if pitcher_name == game.get("home_pitcher") else game.get("away_pitcher_era", 4.50)
 
-    # Get pitcher data quality from engine
-    pitcher_bip = 0
+    # Pitcher data quality warning — use bip from precomputed data if available
+    pitcher_bip = g.get("home_pitcher_bip", 0) if pitcher_name == g.get("home_pitcher") else g.get("away_pitcher_bip", 0)
     data_warning = ""
-    if engine is not None and pitcher_id:
-        p_data = engine.get_pitcher(pitcher_id)
-        pitcher_bip = p_data.get("bip", 0)
-        if pitcher_bip == 0:
-            data_warning = ' <span style="color:#f59e0b;font-size:.7rem">⚠️ No pitcher data</span>'
-        elif pitcher_bip < 50:
-            data_warning = f' <span style="color:#f59e0b;font-size:.7rem">⚠️ Limited data ({pitcher_bip} BIP)</span>'
+    if pitcher_bip == 0:
+        data_warning = ' <span style="color:#f59e0b;font-size:.7rem">⚠️ No pitcher data</span>'
+    elif pitcher_bip < 50:
+        data_warning = f' <span style="color:#f59e0b;font-size:.7rem">⚠️ Limited data ({pitcher_bip} BIP)</span>'
 
     st.markdown(f"""
     <div class="pitcher-card">
