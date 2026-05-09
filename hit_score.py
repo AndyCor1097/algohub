@@ -726,6 +726,8 @@ class HITScoreEngine:
             "pitcher_hard_allowed": round(p_hard * 100, 1),
             "pitcher_swstr":        round(p.get("swstr_rate", 0) * 100, 1) if p else 0,
             "pitcher_primary_vel":  p.get("primary_vel", 0) if p else 0,
+            "pitcher_bip":          p.get("bip", 0) if p else 0,
+            "pitcher_data_quality": "good" if p and p.get("bip", 0) >= 50 else "limited" if p and p.get("bip", 0) >= 10 else "none",
         }
 
     def get_k_score(self, pitcher_id: int, batter_id: int, bat_side: str = "R") -> dict:

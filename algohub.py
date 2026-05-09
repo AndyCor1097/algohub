@@ -537,6 +537,17 @@ def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather
     wind_str = "🏟️ DOME" if is_dome else game.get("weather", {}).get("wind_label", "")
     era = game.get("home_pitcher_era", 4.50) if pitcher_name == game.get("home_pitcher") else game.get("away_pitcher_era", 4.50)
 
+    # Get pitcher data quality from engine
+    pitcher_bip = 0
+    data_warning = ""
+    if engine and pitcher_id:
+        p_data = engine.get_pitcher(pitcher_id)
+        pitcher_bip = p_data.get("bip", 0)
+        if pitcher_bip == 0:
+            data_warning = ' <span style="color:#f59e0b;font-size:.7rem">⚠️ No pitcher data</span>'
+        elif pitcher_bip < 50:
+            data_warning = f' <span style="color:#f59e0b;font-size:.7rem">⚠️ Limited data ({pitcher_bip} BIP)</span>'
+
     st.markdown(f"""
     <div class="pitcher-card">
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -545,6 +556,7 @@ def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather
                 <span class="pitcher-name">{pitcher_name}</span>
                 <span style="font-size:.75rem;color:#475569;margin-left:8px">{'LHP' if pitcher_hand=='L' else 'RHP'}</span>
                 <span style="font-size:.72rem;color:#94a3b8;margin-left:8px;font-family:'DM Mono',monospace">ERA {era:.2f}</span>
+                {data_warning}
             </div>
             <div style="text-align:right;font-family:'DM Mono',monospace;font-size:.72rem;color:#475569">
                 PF {pf:.2f} &nbsp;|&nbsp; {wind_str}

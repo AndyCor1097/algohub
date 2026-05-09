@@ -207,39 +207,106 @@ def build_zone_maps(raw: pd.DataFrame) -> dict:
     }
 
 
+def merge_pitcher_zones(maps_2024: dict, maps_2025: dict) -> dict:
+    """
+    Merge 2024 and 2025 pitcher zone maps.
+    2025 weighted 60%, 2024 weighted 40% for pitch mix/velocity.
+    Zone HR counts combined (summed) for maximum sample size.
+    """
+    print("  Merging 2024 + 2025 pitcher zone maps...")
+    pitchers_25 = maps_2025.get("pitcher_zones", {})
+    pitchers_24 = maps_2024.get("pitcher_zones", {})
+
+    merged = dict(pitchers_25)  # Start with 2025
+
+    for pid, data_24 in pitchers_24.items():
+        if pid in merged:
+            curr = merged[pid]
+            # Combine zone HR counts
+            z25 = curr.get("zone_hrs_allowed", {})
+            z24 = data_24.get("zone_hrs_allowed", {})
+            merged_zones = {}
+            for z in set(list(z25.keys()) + list(z24.keys())):
+                merged_zones[z] = z25.get(z, 0) + z24.get(z, 0)
+            curr["zone_hrs_allowed"] = merged_zones
+
+            # If 2025 pitch mix is sparse, supplement with 2024
+            if not curr.get("pitch_mix") and data_24.get("pitch_mix"):
+                curr["pitch_mix"]     = data_24["pitch_mix"]
+                curr["primary_pitch"] = data_24["primary_pitch"]
+                curr["primary_vel"]   = data_24["primary_vel"]
+                curr["vel_band"]      = data_24["vel_band"]
+
+            # Blend HR/FB rates
+            hr_fb_25 = curr.get("hr_per_fb", 0.12)
+            hr_fb_24 = data_24.get("hr_per_fb", 0.12)
+            curr["hr_per_fb"] = round(hr_fb_25 * 0.6 + hr_fb_24 * 0.4, 3)
+
+        else:
+            # Pitcher only in 2024 — add as fallback
+            merged[pid] = data_24
+
+    print(f"  Merged: {len(merged)} pitchers ({len(pitchers_25)} from 2025, {len(pitchers_24)} from 2024)")
+    return merged
+
+
 def main():
     os.makedirs("data", exist_ok=True)
 
     print("=" * 60)
-    print("  AlgoHub Zone Map Builder — 2025 Season")
+    print("  AlgoHub Zone Map Builder — 2024 + 2025 Seasons")
     print("=" * 60)
 
-    # Pull full 2025 season
-    print("\nPulling 2025 Statcast data (full season)...")
+    # Pull 2025 season
+    print("\n[1/3] Pulling 2025 Statcast data (full season)...")
     print("This will take 5-10 minutes...\n")
-
     try:
-        raw = pb.statcast("2025-03-20", "2025-10-01")
-        print(f"\n  Got {len(raw):,} pitch records")
-        print(f"  Date range: {raw['game_date'].min()} → {raw['game_date'].max()}")
+        raw_2025 = pb.statcast("2025-03-20", "2025-10-01")
+        print(f"  Got {len(raw_2025):,} pitch records")
     except Exception as e:
-        print(f"ERROR pulling Statcast: {e}")
+        print(f"ERROR pulling 2025 data: {e}")
         return
 
-    # Build maps
-    print("\nBuilding zone maps...")
-    maps = build_zone_maps(raw)
+    # Pull 2024 season (pitcher data only — for fallback)
+    print("\n[2/3] Pulling 2024 Statcast data (pitchers only)...")
+    print("This will take 5-10 minutes...\n")
+    try:
+        raw_2024 = pb.statcast("2024-03-20", "2024-10-01")
+        print(f"  Got {len(raw_2024):,} pitch records")
+    except Exception as e:
+        print(f"  Warning: Could not pull 2024 data ({e}). Using 2025 only.")
+        raw_2024 = None
+
+    # Build 2025 maps
+    print("\n[3/3] Building zone maps...")
+    maps_2025 = build_zone_maps(raw_2025)
+
+    # Build 2024 pitcher maps and merge
+    if raw_2024 is not None:
+        maps_2024 = build_zone_maps(raw_2024)
+        merged_pitchers = merge_pitcher_zones(maps_2024, maps_2025)
+    else:
+        merged_pitchers = maps_2025.get("pitcher_zones", {})
+
+    # Final maps — use 2025 batters, merged pitchers
+    final_maps = {
+        "batter_zones":  maps_2025["batter_zones"],
+        "pitcher_zones": merged_pitchers,
+        "built_at":      datetime.now().isoformat(),
+        "seasons":       ["2024", "2025"],
+    }
 
     # Save
     print(f"\nSaving to {ZONE_MAPS_PATH}...")
     with open(ZONE_MAPS_PATH, "wb") as f:
-        pickle.dump(maps, f)
+        pickle.dump(final_maps, f)
 
     size_mb = os.path.getsize(ZONE_MAPS_PATH) / 1024 / 1024
     print(f"  Saved {size_mb:.1f} MB")
-    print(f"  Batters: {len(maps['batter_zones']):,}")
-    print(f"  Pitchers: {len(maps['pitcher_zones']):,}")
+    print(f"  Batters: {len(final_maps['batter_zones']):,}")
+    print(f"  Pitchers: {len(final_maps['pitcher_zones']):,}")
     print("\n✓ Zone maps ready. Launch algohub.py to use them.")
+    print("  Pitchers like Snell, injured guys now have 2024 data as fallback.")
 
 
 if __name__ == "__main__":
