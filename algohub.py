@@ -540,7 +540,7 @@ def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather
     # Get pitcher data quality from engine
     pitcher_bip = 0
     data_warning = ""
-    if engine and pitcher_id:
+    if engine is not None and pitcher_id:
         p_data = engine.get_pitcher(pitcher_id)
         pitcher_bip = p_data.get("bip", 0)
         if pitcher_bip == 0:
