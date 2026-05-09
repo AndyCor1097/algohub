@@ -68,6 +68,13 @@ def get_schedule():
                 away_abbr = TEAM_MAP.get(away_id, away["team"].get("abbreviation","???"))
                 hp = home.get("probablePitcher", {})
                 ap = away.get("probablePitcher", {})
+                raw_time = g.get("gameDate", "")
+                try:
+                    dt = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+                    et = timezone(timedelta(hours=-4))
+                    game_time_str = dt.astimezone(et).strftime("%I:%M %p ET").lstrip("0")
+                except:
+                    game_time_str = raw_time[11:16] if raw_time else "TBD"
                 games.append({
                     "game_pk":         g["gamePk"],
                     "home_team":       home_abbr,
@@ -79,7 +86,7 @@ def get_schedule():
                     "home_pitcher_id": hp.get("id"),
                     "away_pitcher_id": ap.get("id"),
                     "venue":           g.get("venue", {}).get("name", ""),
-                    "game_time":       g.get("gameDate", ""),
+                    "game_time":       game_time_str,
                 })
         return games
     except Exception as e:

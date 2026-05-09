@@ -204,11 +204,16 @@ def load_schedule():
                 game_time = g.get("gameDate", "")
                 if game_time:
                     try:
-                        from datetime import timezone
                         dt = datetime.fromisoformat(game_time.replace("Z", "+00:00"))
-                        local = dt.astimezone().strftime("%-I:%M %p")
+                        et = timezone(timedelta(hours=-4))
+                        local = dt.astimezone(et).strftime("%-I:%M %p ET")
                     except:
-                        local = game_time[11:16]
+                        try:
+                            dt = datetime.fromisoformat(game_time.replace("Z", "+00:00"))
+                            et = timezone(timedelta(hours=-4))
+                            local = dt.astimezone(et).strftime("%I:%M %p ET").lstrip("0")
+                        except:
+                            local = game_time[11:16]
                 else:
                     local = "TBD"
 
