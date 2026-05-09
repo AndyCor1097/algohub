@@ -639,7 +639,15 @@ def render_lineup_section(pitcher_name, pitcher_id, pitcher_hand, batters, home_
     existing = st.session_state.get("top_picks", [])
     combined = existing + results
     combined.sort(key=lambda x: x.get("hit_score", 0), reverse=True)
-    st.session_state["top_picks"] = combined[:5]
+    # Deduplicate by player name
+    seen = set()
+    deduped = []
+    for p in combined:
+        name = p.get("player_name", "")
+        if name not in seen:
+            seen.add(name)
+            deduped.append(p)
+    st.session_state["top_picks"] = deduped[:5]
 
     for i, r in enumerate(results):
         render_batter_row(i+1, r, r)
@@ -705,7 +713,16 @@ def main():
                 b["game"] = f"{g_item['away_team']} @ {g_item['home_team']}"
                 b["pitcher"] = g_item.get("away_pitcher","TBD") if b in g_item.get("home_batters",[]) else g_item.get("home_pitcher","TBD")
                 all_batters.append(b)
-        top5 = sorted(all_batters, key=lambda x: x.get("hit_score", 0), reverse=True)[:5]
+        top_raw = sorted(all_batters, key=lambda x: x.get("hit_score", 0), reverse=True)
+        seen = set()
+        top5 = []
+        for b in top_raw:
+            name = b.get("player_name", "")
+            if name not in seen:
+                seen.add(name)
+                top5.append(b)
+            if len(top5) == 5:
+                break
     else:
         # Use cached top picks from session state (populated as user clicks games)
         top5 = st.session_state.get("top_picks", [])
