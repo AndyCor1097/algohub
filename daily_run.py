@@ -137,10 +137,13 @@ def prefetch_hands(player_ids: list):
             time.sleep(0.3)
         except Exception as e:
             log(f"Bulk hand fetch failed: {e}")
+
+
+def get_hand(player_id: int) -> dict:
     if not player_id: return {"bat_side": "R", "pitch_hand": "R"}
     if player_id in _hand_cache: return _hand_cache[player_id]
     try:
-        time.sleep(0.15)  # Rate limit protection
+        time.sleep(0.15)
         r = requests.get(f"https://statsapi.mlb.com/api/v1/people/{player_id}", timeout=8)
         p = r.json().get("people", [{}])[0]
         bat  = p.get("batSide", {}).get("code", "R")

@@ -100,20 +100,19 @@ class HITScoreEngine:
             hist_batters  = historical.get("batter_zones", {})
             hist_pitchers = historical.get("pitcher_zones", {})
 
-            # Merge batter zones — historical fills gaps only
+            # Merge batter zones — sum 2026 + historical counts
             merged_b = 0
             for pid, hist_data in hist_batters.items():
                 if pid in self._batter_index:
                     curr = self._batter_index[pid]
                     curr_zones = curr.get("zone_hrs", {})
                     hist_zones = hist_data.get("zone_hrs", {})
-                    # Only add historical zones that aren't in live data
-                    for z, v in hist_zones.items():
-                        if z not in curr_zones:
-                            curr_zones[z] = v
-                    curr["zone_hrs"] = curr_zones
+                    merged_zones = {}
+                    all_zones = set(curr_zones.keys()) | set(hist_zones.keys())
+                    for z in all_zones:
+                        merged_zones[z] = curr_zones.get(z, 0) + hist_zones.get(z, 0)
+                    curr["zone_hrs"] = merged_zones
 
-                    # Merge pt_barrels
                     curr_pt = curr.get("pt_barrels", {})
                     hist_pt = hist_data.get("pt_barrels", {})
                     for pt_group in set(list(curr_pt.keys()) + list(hist_pt.keys())):
@@ -129,20 +128,18 @@ class HITScoreEngine:
                 else:
                     self._batter_index[pid] = hist_data
 
-            # Merge pitcher zones — historical fills gaps, supplements pitch mix
+            # Merge pitcher zones — sum counts, supplement pitch mix
             merged_p = 0
             for pid, hist_data in hist_pitchers.items():
                 if pid in self._pitcher_index:
                     curr = self._pitcher_index[pid]
                     curr_zones = curr.get("zone_hrs_allowed", {})
                     hist_zones = hist_data.get("zone_hrs_allowed", {})
-                    # Only add historical zones not in live data
-                    for z, v in hist_zones.items():
-                        if z not in curr_zones:
-                            curr_zones[z] = v
-                    curr["zone_hrs_allowed"] = curr_zones
-
-                    # Use historical pitch mix if live is sparse
+                    merged_zones = {}
+                    all_zones = set(curr_zones.keys()) | set(hist_zones.keys())
+                    for z in all_zones:
+                        merged_zones[z] = curr_zones.get(z, 0) + hist_zones.get(z, 0)
+                    curr["zone_hrs_allowed"] = merged_zones
                     if not curr.get("pitch_mix") and hist_data.get("pitch_mix"):
                         curr["pitch_mix"]     = hist_data["pitch_mix"]
                         curr["primary_pitch"] = hist_data["primary_pitch"]
@@ -487,71 +484,22 @@ class HITScoreEngine:
 
     def compute_zone_fit(self, batter_id: int, pitcher_id: int) -> dict:
         """
-        Zone overlap — where pitcher gives up HRs vs where batter crushes.
-
-        Batter zones: live 30-day Statcast (most recent form, primary signal)
-        Pitcher zones: blended live 30-day (70%) + historical pkl (30%)
-                       Falls back to historical only if live is sparse.
-
-        Returns zone_fit score (0-1) and zone_count (overlap zones).
+        Zone overlap — where batter hits HRs vs where pitcher gives them up.
+        Uses merged batter index (live 2026 + historical pkl zones combined).
         """
         b = self._batter_index.get(int(batter_id), {})
         p = self._pitcher_index.get(int(pitcher_id), {})
 
-        # Batter zones — live 30-day is primary
-        bz_live = {k: v for k, v in b.get("zone_hrs", {}).items() if v > 0}
-
-        # Also check historical pkl batter zones
-        pkl_batter = {}
-        if self._zone_maps and "batter_zones" in self._zone_maps:
-            pkl_b = self._zone_maps["batter_zones"].get(int(batter_id), {})
-            pkl_batter = {k: v for k, v in pkl_b.get("zone_hrs", {}).items() if v > 0}
-
-        # Merge batter zones — live weighted 70%, historical 30%
-        all_batter_zones = set(list(bz_live.keys()) + list(pkl_batter.keys()))
-        bz_weighted = {}
-        for z in all_batter_zones:
-            live_v = bz_live.get(z, 0)
-            hist_v = pkl_batter.get(z, 0)
-            bz_weighted[z] = live_v * 0.70 + hist_v * 0.30
-
-        # Pitcher zones — blend live + historical pkl
-        pz_live = {k: v for k, v in p.get("zone_hrs_allowed", {}).items() if v > 0}
-
-        pkl_pitcher = {}
-        if self._zone_maps and "pitcher_zones" in self._zone_maps:
-            pkl_p = self._zone_maps["pitcher_zones"].get(int(pitcher_id), {})
-            pkl_pitcher = {k: v for k, v in pkl_p.get("zone_hrs_allowed", {}).items() if v > 0}
-
-        # Merge pitcher zones — live 70%, historical 30%
-        all_pitcher_zones = set(list(pz_live.keys()) + list(pkl_pitcher.keys()))
-        pz_weighted = {}
-        for z in all_pitcher_zones:
-            live_v = pz_live.get(z, 0)
-            hist_v = pkl_pitcher.get(z, 0)
-            pz_weighted[z] = live_v * 0.70 + hist_v * 0.30
-
-        # Use weighted zones for overlap
-        bz = set(bz_weighted.keys())
-        pz = set(pz_weighted.keys())
-
-        # Fall back to pure historical if live is empty
-        if not bz:
-            bz = set(pkl_batter.keys())
-        if not pz:
-            pz = set(pkl_pitcher.keys())
+        bz = set(k for k, v in b.get("zone_hrs", {}).items() if v > 0)
+        pz = set(k for k, v in p.get("zone_hrs_allowed", {}).items() if v > 0)
 
         if not bz or not pz:
             return {"zone_fit": 0.0, "zone_count": 0, "kill_zones": set(),
                     "batter_zones": bz, "pitcher_zones": pz}
 
-        overlap  = bz & pz
-        union    = bz | pz
-
-        # Weighted fit — zones with higher overlap get more credit
-        weighted_overlap = sum(min(bz_weighted.get(z, 0), pz_weighted.get(z, 0)) for z in overlap)
-        weighted_total   = sum(bz_weighted.get(z, 0) + pz_weighted.get(z, 0) for z in union)
-        fit = weighted_overlap / weighted_total if weighted_total > 0 else len(overlap) / len(union)
+        overlap = bz & pz
+        union   = bz | pz
+        fit     = len(overlap) / len(union) if union else 0.0
 
         return {
             "zone_fit":      round(fit, 3),
