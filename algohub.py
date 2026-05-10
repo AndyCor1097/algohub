@@ -508,8 +508,8 @@ def render_batter_row(rank, player, hit_data, odds=None):
     hh    = hit_data.get("hard_hit_pct", 0)
     xwoba = hit_data.get("xwoba") or 0
 
-    # ZF score
-    zf = min((zone_fit * 0.6) + (min(pitch_ms / 0.15, 1.0) * 0.4), 1.0)
+    # ZF — use raw zone_fit directly
+    zf = zone_fit
     zf_color = "#22c55e" if zf >= 0.45 else "#f59e0b" if zf >= 0.25 else "#475569"
 
     st.markdown(f"""
