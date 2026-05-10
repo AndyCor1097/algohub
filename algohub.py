@@ -92,7 +92,7 @@ html, body, [class*="css"] { background: var(--bg) !important; color: var(--text
 /* Batter rows */
 .batter-row {
     display: grid;
-    grid-template-columns: 28px 185px 65px 80px 65px 65px 65px 70px 55px 60px 75px;
+    grid-template-columns: 28px 185px 65px 80px 65px 65px 65px 70px 60px 75px;
     align-items: center;
     padding: 7px 10px;
     border-radius: 6px;
@@ -507,8 +507,6 @@ def render_batter_row(rank, player, hit_data, odds=None):
     hand_str = f"<span style='font-size:.65rem;color:#475569'>{bat_side}HB</span>"
     hh    = hit_data.get("hard_hit_pct", 0)
     xwoba = hit_data.get("xwoba") or 0
-    la_c  = hit_data.get("la_consistency", 0)
-    pull  = hit_data.get("pull_rate", 0)
 
     # ZF score
     zf = min((zone_fit * 0.6) + (min(pitch_ms / 0.15, 1.0) * 0.4), 1.0)
@@ -524,7 +522,6 @@ def render_batter_row(rank, player, hit_data, odds=None):
         <span class="batter-stat {'stat-cell-green' if hh>=50 else 'stat-cell-amber' if hh>=40 else 'stat-cell-muted'}">{hh:.1f}%</span>
         <span class="batter-stat {'stat-cell-green' if ev>=92 else 'stat-cell-amber' if ev>=88 else 'stat-cell-muted'}">{ev:.1f}</span>
         <span class="batter-stat {'stat-cell-green' if xwoba>=0.360 else 'stat-cell-amber' if xwoba>=0.300 else 'stat-cell-muted'}">{xwoba:.3f}</span>
-        <span class="batter-stat {'stat-cell-green' if la_c>=35 else 'stat-cell-amber' if la_c>=25 else 'stat-cell-muted'}">{la_c:.0f}%</span>
         <span class="batter-stat">{proj:.1f}%</span>
         <span style="font-size:0.7rem;color:#475569">{edge_str}</span>
     </div>
@@ -579,7 +576,6 @@ def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather
         <span class="batter-header">HH%</span>
         <span class="batter-header">EV</span>
         <span class="batter-header">xwOBA</span>
-        <span class="batter-header">LA%</span>
         <span class="batter-header">PROJ%</span>
         <span class="batter-header">EDGE</span>
     </div>
@@ -621,7 +617,6 @@ def render_lineup_section(pitcher_name, pitcher_id, pitcher_hand, batters, home_
         <span class="batter-header">HH%</span>
         <span class="batter-header">EV</span>
         <span class="batter-header">xwOBA</span>
-        <span class="batter-header">LA%</span>
         <span class="batter-header">PROJ%</span>
         <span class="batter-header">EDGE</span>
     </div>

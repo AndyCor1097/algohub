@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import requests
 import pybaseball as pb
 import pandas as pd
@@ -115,10 +116,31 @@ def get_roster(team_id: int) -> list:
 
 # ── Player Hand ────────────────────────────────────────────────────────────────
 _hand_cache = {}
-def get_hand(player_id: int) -> dict:
+def prefetch_hands(player_ids: list):
+    """Bulk fetch handedness for a list of player IDs in one API call."""
+    uncached = [pid for pid in player_ids if pid and pid not in _hand_cache]
+    if not uncached:
+        return
+    # MLB API supports comma-separated player IDs
+    chunks = [uncached[i:i+50] for i in range(0, len(uncached), 50)]
+    for chunk in chunks:
+        try:
+            ids_str = ",".join(str(p) for p in chunk)
+            r = requests.get(f"https://statsapi.mlb.com/api/v1/people?personIds={ids_str}", timeout=15)
+            for p in r.json().get("people", []):
+                pid  = p.get("id")
+                bat  = p.get("batSide", {}).get("code", "R")
+                hand = p.get("pitchHand", {}).get("code", "R")
+                bat  = bat  if bat  in ("L","R","S") else "R"
+                hand = hand if hand in ("L","R")     else "R"
+                _hand_cache[int(pid)] = {"bat_side": bat, "pitch_hand": hand}
+            time.sleep(0.3)
+        except Exception as e:
+            log(f"Bulk hand fetch failed: {e}")
     if not player_id: return {"bat_side": "R", "pitch_hand": "R"}
     if player_id in _hand_cache: return _hand_cache[player_id]
     try:
+        time.sleep(0.15)  # Rate limit protection
         r = requests.get(f"https://statsapi.mlb.com/api/v1/people/{player_id}", timeout=8)
         p = r.json().get("people", [{}])[0]
         bat  = p.get("batSide", {}).get("code", "R")
@@ -256,6 +278,12 @@ def main():
 
         home_roster = get_roster(g["home_team_id"])
         away_roster = get_roster(g["away_team_id"])
+
+        # Bulk prefetch all player hands in one API call
+        all_pids = [p["player_id"] for p in home_roster + away_roster]
+        if home_pitcher_id: all_pids.append(home_pitcher_id)
+        if away_pitcher_id: all_pids.append(away_pitcher_id)
+        prefetch_hands(all_pids)
 
         def score_lineup(batters, pitcher_id, pitcher_hand, p_stats):
             results = []
