@@ -994,13 +994,35 @@ def main():
                     pitcher_data = engine.get_pitcher(pitcher_id)
                     swstr = pitcher_data.get("swstr_rate", 0)
                     vel   = pitcher_data.get("primary_vel", 0)
+                    k_rate = pitcher_data.get("k_rate", 0)
+                    proj_ks = engine.compute_proj_ks(pitcher_id, opp_batters)
 
-                    sc1,sc2,sc3 = st.columns(3)
-                    sc1.metric("SwStr%", f"{swstr*100:.1f}%")
-                    sc2.metric("Primary Velo", f"{vel:.1f}")
-                    sc3.metric("Primary Pitch", pitcher_data.get("primary_pitch","—") or "—")
+                    # Pitcher header with proj Ks
+                    st.markdown(f"""
+                    <div style="display:flex;gap:24px;padding:8px 0;margin-bottom:8px;border-bottom:1px solid #1c2333;">
+                        <div style="text-align:center;">
+                            <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:#475569">PROJ Ks</div>
+                            <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:#a855f7">{proj_ks:.1f}</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:#475569">SwStr%</div>
+                            <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:{'#22c55e' if swstr>=0.13 else '#f59e0b' if swstr>=0.10 else '#94a3b8'}">{swstr*100:.1f}%</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:#475569">VELO</div>
+                            <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:{'#22c55e' if vel>=97 else '#f59e0b' if vel>=93 else '#94a3b8'}">{vel:.1f}</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:#475569">PRIMARY</div>
+                            <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:#94a3b8">{pitcher_data.get("primary_pitch","—") or "—"}</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:#475569">K/GM</div>
+                            <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:#94a3b8">{k_rate:.1f}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                    # K scores per batter
                     k_results = []
                     for batter in opp_batters:
                         bid = batter.get("player_id")
@@ -1011,11 +1033,9 @@ def main():
                             "name":    batter.get("player_name",""),
                             "k_score": k_data.get("k_score",0),
                             "grade":   k_data.get("grade","MODERATE"),
-                            "swstr":   k_data.get("swstr_pct",0),
                         })
 
                     k_results.sort(key=lambda x: x["k_score"], reverse=True)
-
                     for kr in k_results[:8]:
                         grade_color = {"ELITE":"#fca5a5","STRONG":"#fcd34d","MODERATE":"#7dd3fc","FADE":"#475569"}.get(kr["grade"],"#475569")
                         st.markdown(f"""
@@ -1024,8 +1044,40 @@ def main():
                             <span style="font-family:'DM Mono',monospace;font-size:.75rem;color:{grade_color}">{kr['k_score']:.0f} K-Score</span>
                         </div>
                         """, unsafe_allow_html=True)
+
+                elif precomputed:
+                    # Show proj Ks from daily_run data
+                    is_home_pitcher = pitcher_name == g.get("home_pitcher")
+                    proj_ks = g.get("home_proj_ks", 0) if is_home_pitcher else g.get("away_proj_ks", 0)
+                    k_rate  = g.get("home_pitcher_krate", 0) if is_home_pitcher else g.get("away_pitcher_krate", 0)
+
+                    if proj_ks > 0:
+                        st.markdown(f"""
+                        <div style="display:flex;gap:24px;padding:8px 0;margin-bottom:8px;border-bottom:1px solid #1c2333;">
+                            <div style="text-align:center;">
+                                <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:#475569">PROJ Ks</div>
+                                <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:#a855f7">{proj_ks:.1f}</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:#475569">K/GM</div>
+                                <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:#94a3b8">{k_rate:.1f}</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    k_results = sorted(opp_batters, key=lambda x: x.get("k_score", 50), reverse=True)
+                    for kr in k_results[:8]:
+                        grade = kr.get("k_grade", "MODERATE")
+                        k_score = kr.get("k_score", 50)
+                        grade_color = {"ELITE":"#fca5a5","STRONG":"#fcd34d","MODERATE":"#7dd3fc","FADE":"#475569"}.get(grade,"#475569")
+                        st.markdown(f"""
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:#0c1018;border-radius:5px;margin-bottom:3px;">
+                            <span style="font-size:.84rem;font-weight:500">{kr['player_name']}</span>
+                            <span style="font-family:'DM Mono',monospace;font-size:.75rem;color:{grade_color}">{k_score:.0f} K-Score</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                 else:
-                    st.info("Engine needed for K analysis")
+                    st.info("Run `python daily_run.py` to enable K Props in pre-computed mode.")
 
     # ── TAB 4: Parlay Builder ──────────────────────────────────────────────────
     with tab4:

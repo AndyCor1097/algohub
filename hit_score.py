@@ -413,6 +413,12 @@ class HITScoreEngine:
                 all_pitches = len(pitcher_raw)
                 swstr = len(swings) / max(all_pitches, 1)
 
+            # K rate — strikeouts per game
+            k_count = 0
+            if "events" in pitcher_raw.columns:
+                k_count = int((pitcher_raw["events"] == "strikeout").sum())
+            k_rate = round(k_count / max(games, 1), 2)
+
             self._pitcher_index[int(pid)] = {
                 "games":            int(games),
                 "bip":              len(grp),
@@ -427,6 +433,8 @@ class HITScoreEngine:
                 "vel_band":         vel_band,
                 "swstr_rate":       round(swstr, 3),
                 "avg_ev_allowed":   float(grp["launch_speed"].mean()) if "launch_speed" in grp.columns else 0,
+                "k_rate":           k_rate,
+                "k_count":          k_count,
             }
 
     # ── Public API ─────────────────────────────────────────────────────────────
@@ -436,6 +444,39 @@ class HITScoreEngine:
 
     def get_pitcher(self, pitcher_id: int) -> dict:
         return self._pitcher_index.get(int(pitcher_id), {})
+
+    def compute_proj_ks(self, pitcher_id: int, batters: list) -> float:
+        """
+        Project total Ks for a pitcher tonight based on:
+        - Pitcher's K rate (Ks per game)
+        - Opponent lineup average K tendency
+        - SwStr% adjustment
+        Returns projected K total.
+        """
+        p = self._pitcher_index.get(int(pitcher_id), {})
+        if not p:
+            return 0.0
+
+        k_rate    = p.get("k_rate", 5.0)
+        swstr     = p.get("swstr_rate", 0.10)
+
+        # Average batter SwStr% from lineup
+        lineup_swstr = []
+        for b in batters:
+            bid = b.get("player_id") or b.get("batter")
+            if not bid:
+                continue
+            bdata = self._batter_index.get(int(bid), {})
+            if bdata:
+                lineup_swstr.append(bdata.get("swstr_rate", 0.10))
+
+        avg_lineup_swstr = sum(lineup_swstr) / len(lineup_swstr) if lineup_swstr else 0.10
+
+        # Adjustment: high lineup SwStr% vs pitcher = more Ks
+        swstr_adj = (swstr + avg_lineup_swstr) / (0.10 + 0.10)  # relative to league avg
+
+        proj_ks = round(k_rate * swstr_adj, 1)
+        return max(proj_ks, 0.0)
 
     def compute_zone_fit(self, batter_id: int, pitcher_id: int) -> dict:
         """

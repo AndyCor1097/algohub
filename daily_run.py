@@ -274,6 +274,11 @@ def main():
                     pitcher_hr9  = p_stats["hr9"],
                     pitcher_hrfb = p_stats["hrfb"],
                 )
+                k_data = engine.get_k_score(
+                    pitcher_id = pitcher_id or 0,
+                    batter_id  = pid,
+                    bat_side   = hand["bat_side"],
+                )
                 results.append({
                     "player_id":      pid,
                     "player_name":    player["player_name"],
@@ -302,6 +307,8 @@ def main():
                     "hh_7":           hit_data.get("hh_7", 0),
                     "xwoba_7":        hit_data.get("xwoba_7"),
                     "ev_7":           hit_data.get("ev_7", 0),
+                    "k_score":        k_data.get("k_score", 50),
+                    "k_grade":        k_data.get("grade", "MODERATE"),
                 })
             results.sort(key=lambda x: x["hit_score"], reverse=True)
             return results
@@ -332,6 +339,10 @@ def main():
             "away_pitcher_era":   away_p_stats["era"],
             "home_pitcher_bip":   engine._pitcher_index.get(int(home_pitcher_id), {}).get("bip", 0) if home_pitcher_id and engine else 0,
             "away_pitcher_bip":   engine._pitcher_index.get(int(away_pitcher_id), {}).get("bip", 0) if away_pitcher_id and engine else 0,
+            "home_pitcher_krate": engine._pitcher_index.get(int(home_pitcher_id), {}).get("k_rate", 0) if home_pitcher_id and engine else 0,
+            "away_pitcher_krate": engine._pitcher_index.get(int(away_pitcher_id), {}).get("k_rate", 0) if away_pitcher_id and engine else 0,
+            "home_proj_ks":       engine.compute_proj_ks(home_pitcher_id, away_scored) if home_pitcher_id and engine else 0,
+            "away_proj_ks":       engine.compute_proj_ks(away_pitcher_id, home_scored) if away_pitcher_id and engine else 0,
             # home batters face away pitcher
             "home_batters":       home_scored,
             # away batters face home pitcher
