@@ -512,7 +512,7 @@ def render_batter_row(rank, player, hit_data, odds=None):
 
     # ZF score
     zf = min((zone_fit * 0.6) + (min(pitch_ms / 0.15, 1.0) * 0.4), 1.0)
-    zf_color = "#22c55e" if zf >= 0.7 else "#f59e0b" if zf >= 0.4 else "#475569"
+    zf_color = "#22c55e" if zf >= 0.45 else "#f59e0b" if zf >= 0.25 else "#475569"
 
     st.markdown(f"""
     <div class="batter-row {grade}">
@@ -790,8 +790,8 @@ def main():
         <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">50-64 Strong</span></span>
         <span style="font-size:.7rem"><span style="color:#3b82f6">■</span> <span style="color:#94a3b8">35-49 Moderate</span></span>
         <span style="font-size:.7rem;color:#475569;margin-left:8px">ZF:</span>
-        <span style="font-size:.7rem"><span style="color:#22c55e">■</span> <span style="color:#94a3b8">0.70+</span></span>
-        <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">0.40-0.69</span></span>
+        <span style="font-size:.7rem"><span style="color:#22c55e">■</span> <span style="color:#94a3b8">0.45+</span></span>
+        <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">0.25-0.44</span></span>
         <span style="font-size:.7rem;color:#475569;margin-left:8px">BBL%:</span>
         <span style="font-size:.7rem"><span style="color:#22c55e">■</span> <span style="color:#94a3b8">15%+</span></span>
         <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">8-14%</span></span>
@@ -974,8 +974,10 @@ def main():
         k1, k2 = st.columns(2)
 
         for col, pitcher_name, pitcher_id, pitcher_hand, opp_batters, opp_team in [
-            (k1, g.get("away_pitcher","TBD"), g.get("away_pitcher_id"), "R", home_batters, home_team),
-            (k2, g.get("home_pitcher","TBD"), g.get("home_pitcher_id"), "R", away_batters, away_team),
+            (k1, g.get("away_pitcher","TBD"), g.get("away_pitcher_id"), g.get("away_pitcher_hand","R"),
+             g.get("home_batters", []) if precomputed else home_batters, home_team),
+            (k2, g.get("home_pitcher","TBD"), g.get("home_pitcher_id"), g.get("home_pitcher_hand","R"),
+             g.get("away_batters", []) if precomputed else away_batters, away_team),
         ]:
             with col:
                 if pitcher_id:
