@@ -789,6 +789,9 @@ def main():
         <span style="font-size:.7rem"><span style="color:#ef4444">■</span> <span style="color:#94a3b8">65+ Elite</span></span>
         <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">50-64 Strong</span></span>
         <span style="font-size:.7rem"><span style="color:#3b82f6">■</span> <span style="color:#94a3b8">35-49 Moderate</span></span>
+        <span style="font-size:.7rem;color:#475569;margin-left:8px">ZF:</span>
+        <span style="font-size:.7rem"><span style="color:#22c55e">■</span> <span style="color:#94a3b8">0.70+</span></span>
+        <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">0.40-0.69</span></span>
         <span style="font-size:.7rem;color:#475569;margin-left:8px">BBL%:</span>
         <span style="font-size:.7rem"><span style="color:#22c55e">■</span> <span style="color:#94a3b8">15%+</span></span>
         <span style="font-size:.7rem"><span style="color:#f59e0b">■</span> <span style="color:#94a3b8">8-14%</span></span>
