@@ -313,8 +313,8 @@ class HITScoreEngine:
             hr_season_rate = float(hrs / max(games, 1))
             hr_7_rate = hr_7 / max(len(recent), 1) if len(recent) > 0 else 0
 
-            # If zero HRs in last 7 games, dampen the heat score significantly
-            hr_penalty = 1.0 if hr_7 >= 1 else 0.3
+            # If zero HRs in last 30 days total, dampen heat score
+            hr_penalty = 1.0 if int(hrs) >= 1 else 0.3
 
             heat_score = (
                 barrel_trend * 0.35 +

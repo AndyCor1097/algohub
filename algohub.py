@@ -409,14 +409,9 @@ DOME_PARKS = {"TBR","TOR","HOU","MIA","ARI","MIL","ATH","TEX"}
 
 def hot_bat(hr_rate, heat_score=None, recent_hrs=0):
     """
-    Hot/cold based on heat_score (contact quality trend) BUT
-    requires at least 1 recent HR to show hot/warm.
-    0 HRs in last 30 days = cold regardless of contact metrics.
+    Hot/cold based on heat_score (contact quality trend).
+    HR rate used as tiebreaker. No HRs in 30 days dampens but doesn't override.
     """
-    # No recent HRs = cold regardless of contact quality
-    if recent_hrs == 0:
-        return "❄️", "cold"
-
     if heat_score is not None:
         if heat_score >= 0.20:    return "🔥", "hot"
         elif heat_score >= 0.08:  return "🌡️", "warm"
