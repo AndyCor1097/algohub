@@ -407,19 +407,25 @@ DOME_PARKS = {"TBR","TOR","HOU","MIA","ARI","MIL","ATH","TEX"}
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def hot_bat(hr_rate, heat_score=0):
+def hot_bat(hr_rate, heat_score=None, recent_hrs=0):
     """
-    Determines hot/warm/cold based on HR rate AND Statcast trending.
-    heat_score > 0.15 = heating up even without recent HRs.
+    Hot/cold based on heat_score (contact quality trend) BUT
+    requires at least 1 recent HR to show hot/warm.
+    0 HRs in last 30 days = cold regardless of contact metrics.
     """
-    if hr_rate >= 0.25 or heat_score >= 0.20:
-        return "🔥", "hot"
-    elif hr_rate >= 0.10 or heat_score >= 0.08:
-        return "🌡️", "warm"
-    elif heat_score <= -0.15:
+    # No recent HRs = cold regardless of contact quality
+    if recent_hrs == 0:
         return "❄️", "cold"
-    else:
-        return "◆", "neutral"
+
+    if heat_score is not None:
+        if heat_score >= 0.20:    return "🔥", "hot"
+        elif heat_score >= 0.08:  return "🌡️", "warm"
+        elif heat_score <= -0.15: return "❄️", "cold"
+        else:                     return "◆", "neutral"
+
+    if hr_rate >= 0.25:   return "🔥", "hot"
+    elif hr_rate >= 0.10: return "🌡️", "warm"
+    else:                 return "❄️", "cold"
 
 
 def color_stat(val, low, high):
@@ -502,7 +508,8 @@ def render_batter_row(rank, player, hit_data, odds=None):
     edge    = hit_data.get("edge_pitch", "")
     bat_side = hit_data.get("bat_side", "R")
     heat = hit_data.get("heat_score", 0)
-    bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r, heat)
+    hr_7 = hit_data.get("hr_7", 0)
+    bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r, heat, hr_7)
     edge_str = {"fb":"🔥 FB","brk":"🌀 BRK","off":"🎯 OFF"}.get(edge or "","")
     hand_str = f"<span style='font-size:.65rem;color:#475569'>{bat_side}HB</span>"
     hh    = hit_data.get("hard_hit_pct", 0)
@@ -759,7 +766,8 @@ def main():
                 zf    = b.get("zone_fit", 0)
                 hr_r  = b.get("hr_rate", 0)
                 heat  = b.get("heat_score", 0)
-                bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r, heat)
+                hr_7  = b.get("hr_7", 0)
+                bat_icon, _ = hot_bat(hr_r / 100 if hr_r > 1 else hr_r, heat, hr_7)
                 top_color = "#ef4444" if score >= 65 else "#f59e0b" if score >= 50 else "#3b82f6"
                 st.markdown(f"""
                 <div style="background:#0c1018;border:1px solid #1c2333;border-top:2px solid {top_color};border-radius:8px;padding:10px 12px;">

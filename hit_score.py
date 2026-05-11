@@ -308,12 +308,20 @@ class HITScoreEngine:
             ev_trend     = (ev_7 - ev_season) / max(ev_season, 0.01)
 
             # Composite heat score — weighted average of trends
+            # HR rate last 7 acts as a reality check — no HRs = penalty
+            hr_7 = int(recent["is_hr"].sum()) if "is_hr" in recent.columns else 0
+            hr_season_rate = float(hrs / max(games, 1))
+            hr_7_rate = hr_7 / max(len(recent), 1) if len(recent) > 0 else 0
+
+            # If zero HRs in last 7 games, dampen the heat score significantly
+            hr_penalty = 1.0 if hr_7 >= 1 else 0.3
+
             heat_score = (
                 barrel_trend * 0.35 +
                 hh_trend     * 0.25 +
                 xwoba_trend  * 0.25 +
                 ev_trend     * 0.15
-            )
+            ) * hr_penalty
             heat_score = round(float(heat_score), 3)
 
             # Fly ball % — direct from bb_type
@@ -343,6 +351,7 @@ class HITScoreEngine:
                 "sweet_spot":     float(grp["sweet_spot"].mean()) if "sweet_spot" in grp.columns else 0,
                 "la_consistency": la_consistency,
                 "heat_score":     heat_score,
+                "hr_7":           hr_7,
                 "barrel_7":       round(barrel_7 * 100, 1),
                 "hh_7":           round(hh_7 * 100, 1),
                 "xwoba_7":        round(xwoba_7, 3) if xwoba_7 else None,
