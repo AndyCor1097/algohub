@@ -1152,6 +1152,35 @@ def main():
                 tweet = f"💣 HR PARLAY\n\n{legs_text}\n\n{odds_disp} 🔒 AlgoHub locked in\n\n@TheAlgoHub | #MLBProps #HomeRun"
                 st.code(tweet, language=None)
 
+    # ── Full Slate CSV Export ──────────────────────────────────────────────────
+    if precomputed:
+        all_slate = []
+        for g_item in games:
+            home = g_item.get("home_team", "")
+            away = g_item.get("away_team", "")
+            for b in g_item.get("home_batters", []):
+                all_slate.append({"game": f"{away} @ {home}", "team": home,
+                                  "opp_pitcher": g_item.get("away_pitcher","TBD"), **b})
+            for b in g_item.get("away_batters", []):
+                all_slate.append({"game": f"{away} @ {home}", "team": away,
+                                  "opp_pitcher": g_item.get("home_pitcher","TBD"), **b})
+
+        if all_slate:
+            export_cols = ["player_name","game","team","opp_pitcher","bat_side",
+                          "hit_score","grade","zone_fit","barrel_rate","hard_hit_pct",
+                          "avg_ev","xwoba","proj_hr_pct","pull_rate","heat_score"]
+            export_df = pd.DataFrame([{c: r.get(c,"") for c in export_cols} for r in all_slate])
+            export_df.columns = ["Player","Game","Team","Pitcher","Hand","ALGO","Grade",
+                                 "ZF","BBL%","HH%","EV","xwOBA","PROJ%","Pull%","Heat"]
+            export_df = export_df.sort_values("ALGO", ascending=False)
+            csv = export_df.to_csv(index=False)
+            st.download_button(
+                label="📥 Export Full Slate CSV",
+                data=csv,
+                file_name=f"algohub_slate_{et_today()}.csv",
+                mime="text/csv",
+            )
+
     # Footer
     st.divider()
     st.markdown('<div style="text-align:center;font-family:DM Mono,monospace;font-size:.7rem;color:#1c2333">ALGOHUB · @TheAlgoHub · Powered by Baseball Savant Statcast</div>', unsafe_allow_html=True)
