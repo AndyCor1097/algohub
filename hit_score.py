@@ -229,6 +229,37 @@ class HITScoreEngine:
                 total_p    = len(batter_all)
                 swstr_rate = float(len(swings) / max(total_p, 1))
 
+            # Chase rate (O-Swing%) — swings on pitches outside strike zone
+            chase_rate = 0.0
+            if "description" in batter_all.columns and "zone" in batter_all.columns:
+                outside = batter_all[batter_all["zone"] > 9]  # zones 11-14 = outside
+                swings_outside = outside[outside["description"].isin([
+                    "swinging_strike","swinging_strike_blocked","foul","foul_tip",
+                    "hit_into_play","foul_bunt"
+                ])]
+                chase_rate = float(len(swings_outside) / max(len(outside), 1))
+
+            # Bat speed — avg bat speed on swings (Statcast 2024+)
+            avg_bat_speed = 0.0
+            if "bat_speed" in batter_all.columns:
+                bs = pd.to_numeric(batter_all["bat_speed"], errors="coerce").dropna()
+                if len(bs) >= 5:
+                    avg_bat_speed = float(bs.mean())
+
+            # Squared up rate — % of swings that are truly squared up
+            squared_up_rate = 0.0
+            if "squared_up" in batter_all.columns:
+                sq = pd.to_numeric(batter_all["squared_up"], errors="coerce").dropna()
+                if len(sq) >= 5:
+                    squared_up_rate = float(sq.mean())
+            elif "bat_speed" in batter_all.columns and "launch_speed" in batter_all.columns:
+                # Estimate squared up: EV > 95% of bat speed threshold
+                bs_vals = pd.to_numeric(batter_all["bat_speed"], errors="coerce")
+                ev_vals = pd.to_numeric(batter_all["launch_speed"], errors="coerce")
+                valid = bs_vals.notna() & ev_vals.notna()
+                if valid.sum() >= 5:
+                    squared_up_rate = float((ev_vals[valid] >= bs_vals[valid] * 1.1).mean())
+
             # SwStr% by pitch type — key matchup signal
             swstr_by_pt = {}
             if "description" in batter_all.columns and "pitch_type" in batter_all.columns:
@@ -313,8 +344,8 @@ class HITScoreEngine:
             hr_season_rate = float(hrs / max(games, 1))
             hr_7_rate = hr_7 / max(len(recent), 1) if len(recent) > 0 else 0
 
-            # If zero HRs in last 30 days total, dampen heat score
-            hr_penalty = 1.0 if int(hrs) >= 1 else 0.3
+            # Only penalize if enough games played and still no HRs
+            hr_penalty = 1.0 if int(hrs) >= 1 or games < 15 else 0.5
 
             heat_score = (
                 barrel_trend * 0.35 +
@@ -363,6 +394,9 @@ class HITScoreEngine:
                 "iso_proxy":      round(iso_proxy, 3),
                 "swstr_rate":     swstr_rate,
                 "swstr_by_pt":    swstr_by_pt,
+                "chase_rate":     round(chase_rate, 3),
+                "avg_bat_speed":  round(avg_bat_speed, 1),
+                "squared_up_rate": round(squared_up_rate, 3),
                 "hard_hit":       float(grp["hard_hit"].mean()) if "hard_hit" in grp.columns else 0,
                 "avg_ev":         float(pd.to_numeric(grp["launch_speed"], errors="coerce").fillna(0).mean()) if "launch_speed" in grp.columns else 0,
                 "avg_la":         float(pd.to_numeric(grp["launch_angle"], errors="coerce").fillna(0).mean()) if "launch_angle" in grp.columns else 0,
@@ -643,6 +677,18 @@ class HITScoreEngine:
         pull_rate = b.get("pulled_rate", 0)
         pull_score = min(max((pull_rate - 0.30) / 0.25, 0), 1.0) * 3 * min(park_factor / 1.05, 1.0)
 
+        # 9. Bat speed bonus (up to +4) — elite = 75mph+, avg = 69mph
+        avg_bat_speed = b.get("avg_bat_speed", 0)
+        bat_speed_bonus = min(max((avg_bat_speed - 65) / 14, 0), 1.0) * 4 if avg_bat_speed > 0 else 0
+
+        # 10. Squared up rate bonus (up to +3) — elite = 25%+, avg = 15%
+        squared_up = b.get("squared_up_rate", 0)
+        squared_bonus = min(max((squared_up - 0.08) / 0.20, 0), 1.0) * 3 if squared_up > 0 else 0
+
+        # 11. Chase rate penalty (up to -3) — high chase = swinging at bad pitches
+        chase_rate = b.get("chase_rate", 0.28)
+        chase_penalty = min(max((chase_rate - 0.25) / 0.20, 0), 1.0) * -3
+
         # SwStr% matchup bonus (up to +4)
         swstr_bonus = 0.0
         swstr_by_pt = b.get("swstr_by_pt", {})
@@ -691,7 +737,8 @@ class HITScoreEngine:
         base_score = (barrel_score + hh_score + xwoba_score + la_score +
                       fb_score + hrfb_score + ev_score + pull_score +
                       pitcher_score + platoon_score + env_score + form_score)
-        hit_score  = round(min(base_score + zone_bonus + swstr_bonus, 100), 1)
+        hit_score  = round(min(base_score + zone_bonus + swstr_bonus +
+                               bat_speed_bonus + squared_bonus + chase_penalty, 100), 1)
 
         # ── Grade ─────────────────────────────────────────────────────────────
         if hit_score >= 65:   grade = "ELITE"
@@ -734,6 +781,9 @@ class HITScoreEngine:
             "ev_score":       round(ev_score, 1),
             "pull_score":     round(pull_score, 1),
             "swstr_bonus":    round(swstr_bonus, 1),
+            "bat_speed_bonus": round(bat_speed_bonus, 1),
+            "squared_bonus":  round(squared_bonus, 1),
+            "chase_penalty":  round(chase_penalty, 1),
             "pitcher_score":  round(pitcher_score, 1),
             "platoon_score":  round(platoon_score, 1),
             "env_score":      round(env_score, 1),
@@ -764,6 +814,9 @@ class HITScoreEngine:
             "hr_fb_rate":     round(hr_fb * 100, 1),
             "pull_rate":      round(pull_rate * 100, 1),
             "swstr_rate":     round(batter_swstr * 100, 1),
+            "chase_rate":     round(chase_rate * 100, 1),
+            "avg_bat_speed":  round(avg_bat_speed, 1),
+            "squared_up_rate": round(squared_up * 100, 1),
             "avg_ev":         round(avg_ev, 1),
             "avg_la":         round(b.get("avg_la", 0), 1),
             "hr_rate":        round(hr_rate * 100, 2),

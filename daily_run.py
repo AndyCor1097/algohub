@@ -212,29 +212,126 @@ VENUE_COORDS = {
     "Rogers Centre": (43.641, -79.389),
 }
 
+# Park CF orientation in degrees (direction CF faces FROM home plate)
+# Wind blowing FROM this direction = blowing IN, blowing TO = blowing OUT
+PARK_CF_DIRECTION = {
+    "Yankee Stadium":              315,  # CF faces NW
+    "Fenway Park":                  60,  # CF faces NE
+    "Wrigley Field":                45,  # CF faces NE
+    "Citizens Bank Park":          315,  # CF faces NW
+    "Truist Park":                 330,  # CF faces NNW
+    "Great American Ball Park":    300,  # CF faces WNW
+    "Busch Stadium":               315,  # CF faces NW
+    "Dodger Stadium":               45,  # CF faces NE
+    "Oracle Park":                 315,  # CF faces NW
+    "Kauffman Stadium":            315,  # CF faces NW
+    "Oriole Park at Camden Yards": 330,  # CF faces NNW
+    "Globe Life Field":            300,  # CF faces WNW (dome-ish)
+    "Minute Maid Park":            330,  # CF faces NNW
+    "T-Mobile Park":                 0,  # CF faces N
+    "Angel Stadium":                45,  # CF faces NE
+    "Coors Field":                 315,  # CF faces NW
+    "PNC Park":                    315,  # CF faces NW
+    "American Family Field":       315,  # CF faces NW
+    "Target Field":                  0,  # CF faces N
+    "Guaranteed Rate Field":       315,  # CF faces NW
+    "Progressive Field":           330,  # CF faces NNW
+    "Comerica Park":               315,  # CF faces NW
+    "Nationals Park":              315,  # CF faces NW
+    "loanDepot park":              315,  # CF faces NW
+    "Petco Park":                  315,  # CF faces NW
+    "Chase Field":                 315,  # CF faces NW
+    "Citi Field":                    0,  # CF faces N
+    "Sutter Health Park":          270,  # CF faces W
+    "Rate Field":                  315,  # CF faces NW
+}
+
+
+def wind_direction_boost(wind_mph: float, wind_deg: float, venue: str) -> tuple:
+    """
+    Calculate wind boost based on direction relative to park orientation.
+    Returns (boost_value, direction_label)
+    boost > 0 = blowing out (HR friendly)
+    boost < 0 = blowing in (HR suppressing)
+    """
+    if wind_mph < 3:
+        return 0.0, f"💨 {wind_mph:.0f}mph"
+
+    # Find park CF direction
+    cf_dir = None
+    for name, deg in PARK_CF_DIRECTION.items():
+        if name.lower() in venue.lower() or venue.lower() in name.lower():
+            cf_dir = deg
+            break
+
+    if cf_dir is None:
+        # Unknown park — use neutral boost
+        boost = round(wind_mph * 0.06, 2)
+        return boost, f"💨 {wind_mph:.0f}mph"
+
+    # Calculate angle between wind direction and CF direction
+    # Wind direction = where wind is coming FROM
+    # If wind comes FROM direction opposite to CF = blowing OUT to CF = good
+    wind_from = wind_deg
+    cf_facing = cf_dir
+
+    # Angle difference between wind FROM and CF direction
+    diff = abs(((wind_from - cf_facing) + 180) % 360 - 180)
+
+    # diff = 0 → wind blowing straight out to CF (best)
+    # diff = 180 → wind blowing straight in from CF (worst)
+    # diff = 90 → crosswind (neutral)
+    import math
+    direction_factor = math.cos(math.radians(diff))  # 1.0 = out, -1.0 = in
+
+    boost = round(wind_mph * direction_factor * 0.15, 2)
+
+    if direction_factor > 0.5:
+        arrow = "⬆️"  # blowing out
+        label = f"⬆️ {wind_mph:.0f}mph OUT"
+    elif direction_factor < -0.5:
+        arrow = "⬇️"  # blowing in
+        label = f"⬇️ {wind_mph:.0f}mph IN"
+    else:
+        label = f"↔️ {wind_mph:.0f}mph X"
+
+    return boost, label
+
+
 def get_weather(venue: str, is_dome: bool) -> dict:
     if is_dome:
-        return {"temp_f": 72, "wind_mph": 0, "wind_boost": 0, "wind_label": "🏟️ DOME"}
+        return {"temp_f": 72, "wind_mph": 0, "wind_boost": 0, "wind_label": "🏟️ DOME",
+                "wind_dir": 0, "wind_direction_label": "DOME"}
     coords = None
     for name, c in VENUE_COORDS.items():
         if name.lower() in venue.lower() or venue.lower() in name.lower():
             coords = c
             break
     if not coords:
-        return {"temp_f": 70, "wind_mph": 0, "wind_boost": 0, "wind_label": "Unknown"}
+        return {"temp_f": 70, "wind_mph": 0, "wind_boost": 0, "wind_label": "Unknown",
+                "wind_dir": 0, "wind_direction_label": ""}
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={coords[0]}&longitude={coords[1]}&current=temperature_2m,wind_speed_10m,wind_direction_10m,precipitation&temperature_unit=fahrenheit&wind_speed_unit=mph"
         r = requests.get(url, timeout=8)
         d = r.json().get("current", {})
-        temp = round(float(d.get("temperature_2m", 70)), 1)
-        wind = round(float(d.get("wind_speed_10m", 0)), 1)
-        wind_dir = d.get("wind_direction_10m", 0)
-        # Simplified wind boost (out = positive, in = negative)
-        boost = round(wind * 0.12, 2)
-        label = f"🌡️ {temp:.0f}°F 💨 {wind:.0f}mph"
-        return {"temp_f": temp, "wind_mph": wind, "wind_boost": boost, "wind_label": label}
+        temp     = round(float(d.get("temperature_2m", 70)), 1)
+        wind     = round(float(d.get("wind_speed_10m", 0)), 1)
+        wind_dir = float(d.get("wind_direction_10m", 0))
+
+        boost, dir_label = wind_direction_boost(wind, wind_dir, venue)
+
+        label = f"🌡️ {temp:.0f}°F {dir_label}"
+        return {
+            "temp_f":               temp,
+            "wind_mph":             wind,
+            "wind_boost":           boost,
+            "wind_label":           label,
+            "wind_dir":             wind_dir,
+            "wind_direction_label": dir_label,
+        }
     except:
-        return {"temp_f": 70, "wind_mph": 0, "wind_boost": 0, "wind_label": "Unknown"}
+        return {"temp_f": 70, "wind_mph": 0, "wind_boost": 0, "wind_label": "Unknown",
+                "wind_dir": 0, "wind_direction_label": ""}
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────

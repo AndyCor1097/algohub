@@ -342,55 +342,87 @@ def load_bovada_odds() -> dict:
 
 
 @st.cache_data(ttl=300)
+def wind_direction_boost(wind_mph: float, wind_deg: float, venue: str) -> tuple:
+    """Calculate wind boost based on direction vs park orientation."""
+    import math
+    PARK_CF_DIRECTION = {
+        "Yankee Stadium": 315, "Fenway Park": 60, "Wrigley Field": 45,
+        "Citizens Bank Park": 315, "Truist Park": 330, "Great American Ball Park": 300,
+        "Busch Stadium": 315, "Dodger Stadium": 45, "Oracle Park": 315,
+        "Kauffman Stadium": 315, "Camden Yards": 330, "Globe Life Field": 300,
+        "Minute Maid Park": 330, "T-Mobile Park": 0, "Angel Stadium": 45,
+        "Coors Field": 315, "PNC Park": 315, "American Family Field": 315,
+        "Target Field": 0, "Guaranteed Rate Field": 315, "Progressive Field": 330,
+        "Comerica Park": 315, "Nationals Park": 315, "loanDepot park": 315,
+        "Petco Park": 315, "Chase Field": 315, "Citi Field": 0,
+        "Sutter Health Park": 270, "Rate Field": 315,
+    }
+    if wind_mph < 3:
+        return 0.0, f"💨 {wind_mph:.0f}mph"
+    cf_dir = None
+    for name, deg in PARK_CF_DIRECTION.items():
+        if name.lower() in venue.lower() or venue.lower() in name.lower():
+            cf_dir = deg
+            break
+    if cf_dir is None:
+        return round(wind_mph * 0.06, 2), f"💨 {wind_mph:.0f}mph"
+    diff = abs(((wind_deg - cf_dir) + 180) % 360 - 180)
+    direction_factor = math.cos(math.radians(diff))
+    boost = round(wind_mph * direction_factor * 0.15, 2)
+    if direction_factor > 0.5:
+        label = f"⬆️ {wind_mph:.0f}mph OUT"
+    elif direction_factor < -0.5:
+        label = f"⬇️ {wind_mph:.0f}mph IN"
+    else:
+        label = f"↔️ {wind_mph:.0f}mph X"
+    return boost, label
+
+
 def load_weather(venue: str) -> dict:
     """Get weather for a venue."""
-    # Venue coordinate lookup
     VENUE_COORDS = {
-        "Yankee Stadium": (40.829, -73.926),
-        "Fenway Park": (42.347, -71.097),
-        "Wrigley Field": (41.948, -87.655),
-        "Citizens Bank Park": (39.906, -75.166),
-        "Truist Park": (33.890, -84.468),
-        "Great American Ball Park": (39.097, -84.507),
-        "Busch Stadium": (38.623, -90.193),
-        "Dodger Stadium": (34.074, -118.240),
-        "Oracle Park": (37.778, -122.389),
-        "Kauffman Stadium": (39.051, -94.480),
-        "Camden Yards": (39.284, -76.622),
-        "Globe Life Field": (32.751, -97.083),
-        "Minute Maid Park": (29.757, -95.355),
-        "T-Mobile Park": (47.591, -122.333),
-        "Angel Stadium": (33.800, -117.883),
-        "Coors Field": (39.756, -104.994),
-        "PNC Park": (40.447, -80.006),
-        "American Family Field": (43.028, -87.971),
-        "Target Field": (44.982, -93.278),
-        "Guaranteed Rate Field": (41.830, -87.634),
-        "Progressive Field": (41.496, -81.685),
-        "Comerica Park": (42.339, -83.049),
+        "Yankee Stadium": (40.829, -73.926), "Fenway Park": (42.347, -71.097),
+        "Wrigley Field": (41.948, -87.655), "Citizens Bank Park": (39.906, -75.166),
+        "Truist Park": (33.890, -84.468), "Great American Ball Park": (39.097, -84.507),
+        "Busch Stadium": (38.623, -90.193), "Dodger Stadium": (34.074, -118.240),
+        "Oracle Park": (37.778, -122.389), "Kauffman Stadium": (39.051, -94.480),
+        "Camden Yards": (39.284, -76.622), "Globe Life Field": (32.751, -97.083),
+        "Minute Maid Park": (29.757, -95.355), "T-Mobile Park": (47.591, -122.333),
+        "Angel Stadium": (33.800, -117.883), "Coors Field": (39.756, -104.994),
+        "PNC Park": (40.447, -80.006), "American Family Field": (43.028, -87.971),
+        "Target Field": (44.982, -93.278), "Guaranteed Rate Field": (41.830, -87.634),
+        "Progressive Field": (41.496, -81.685), "Comerica Park": (42.339, -83.049),
+        "Nationals Park": (38.873, -77.007), "loanDepot park": (25.778, -80.220),
+        "Petco Park": (32.707, -117.157), "Chase Field": (33.445, -112.067),
+        "Citi Field": (40.757, -73.846), "Sutter Health Park": (38.572, -121.494),
     }
     coords = None
     for name, c in VENUE_COORDS.items():
         if name.lower() in venue.lower() or venue.lower() in name.lower():
             coords = c
             break
-
     if not coords:
-        return {"temp_f": 70, "wind_mph": 0, "wind_dir": "", "precip": 0, "conditions": "Unknown"}
-
+        return {"temp_f": 70, "wind_mph": 0, "wind_dir": 0, "wind_boost": 0,
+                "wind_label": "Unknown", "precip": 0}
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={coords[0]}&longitude={coords[1]}&current=temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={coords[0]}&longitude={coords[1]}&current=temperature_2m,wind_speed_10m,wind_direction_10m,precipitation&temperature_unit=fahrenheit&wind_speed_unit=mph"
         r = requests.get(url, timeout=8)
         d = r.json().get("current", {})
+        temp     = round(float(d.get("temperature_2m", 70)), 1)
+        wind     = round(float(d.get("wind_speed_10m", 0)), 1)
+        wind_dir = float(d.get("wind_direction_10m", 0))
+        boost, dir_label = wind_direction_boost(wind, wind_dir, venue)
         return {
-            "temp_f":     round(d.get("temperature_2m", 70), 1),
-            "wind_mph":   round(d.get("wind_speed_10m", 0), 1),
-            "wind_dir":   d.get("wind_direction_10m", 0),
-            "precip":     d.get("precipitation", 0),
-            "conditions": "Clear" if d.get("weather_code", 0) < 3 else "Cloudy",
+            "temp_f":    temp,
+            "wind_mph":  wind,
+            "wind_dir":  wind_dir,
+            "wind_boost": boost,
+            "wind_label": f"🌡️ {temp:.0f}°F {dir_label}",
+            "precip":    d.get("precipitation", 0),
         }
     except:
-        return {"temp_f": 70, "wind_mph": 0, "wind_dir": 0, "precip": 0, "conditions": "Unknown"}
+        return {"temp_f": 70, "wind_mph": 0, "wind_dir": 0, "wind_boost": 0,
+                "wind_label": "Unknown", "precip": 0}
 
 
 # ── Park Factors ───────────────────────────────────────────────────────────────
@@ -590,7 +622,7 @@ def render_precomputed_lineup(pitcher_name, pitcher_hand, batters, game, weather
 def render_lineup_section(pitcher_name, pitcher_id, pitcher_hand, batters, home_team, engine, odds_lookup, park_factor, weather):
     """Render one side of a game matchup."""
     is_dome = home_team in DOME_PARKS
-    wind_boost = 0 if is_dome else max(weather.get("wind_mph", 0) * 0.1, 0)
+    wind_boost = 0 if is_dome else weather.get("wind_boost", weather.get("wind_mph", 0) * 0.06)
 
     st.markdown(f"""
     <div class="pitcher-card">
@@ -919,7 +951,7 @@ def main():
                 # Score breakdown
                 st.markdown("#### Score Breakdown")
                 breakdown = pd.DataFrame({
-                    "Component": ["Barrel","Hard Hit","xwOBA","LA%","FB%","HR/FB","EV","Pull","SwStr","Pitcher","Platoon","Env","Hot Bat"],
+                    "Component": ["Barrel","Hard Hit","xwOBA","LA%","FB%","HR/FB","EV","Pull","SwStr","Bat Speed","Sq Up","Chase","Pitcher","Platoon","Env","Hot Bat"],
                     "Score": [
                         hit_data.get("barrel_score", 0),
                         hit_data.get("hh_score", 0),
@@ -930,12 +962,15 @@ def main():
                         hit_data.get("ev_score", 0),
                         hit_data.get("pull_score", 0),
                         hit_data.get("swstr_bonus", 0),
+                        hit_data.get("bat_speed_bonus", 0),
+                        hit_data.get("squared_bonus", 0),
+                        hit_data.get("chase_penalty", 0),
                         hit_data.get("pitcher_score", 0),
                         hit_data.get("platoon_score", 0),
                         hit_data.get("env_score", 0),
                         hit_data.get("form_score", 0),
                     ],
-                    "Max": [15, 10, 10, 6, 5, 7, 5, 3, 4, 18, 8, 8, 4],
+                    "Max": [15, 10, 10, 6, 5, 7, 5, 3, 4, 4, 3, 0, 18, 8, 8, 4],
                 })
                 breakdown["Pct"] = breakdown["Score"] / breakdown["Max"]
                 fig = px.bar(breakdown, x="Component", y="Score", color="Pct",
