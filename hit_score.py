@@ -275,17 +275,21 @@ class HITScoreEngine:
                 for z, zgrp in grp.groupby("zone"):
                     zone_hrs[int(z)] = int(zgrp["is_hr"].sum())
 
-            # Pitch type barrel rates
+            # Pitch type splits — barrel%, sweet spot%, HH% by pitch group
             pt_barrels = {}
             if "pitch_type" in grp.columns:
                 for pt_group, types in [("fb", FASTBALL_TYPES), ("brk", BREAKING_TYPES), ("off", OFFSPEED_TYPES)]:
                     sub = grp[grp["pitch_type"].isin(types)]
                     if len(sub) >= 5:
+                        sweet_spot_pt = float(sub["sweet_spot"].mean()) if "sweet_spot" in sub.columns else 0
+                        hh_pt = float(sub["hard_hit"].mean()) if "hard_hit" in sub.columns else 0
                         pt_barrels[pt_group] = {
-                            "barrel_rate": float(sub["barrel"].mean()),
-                            "hr_rate":     float(sub["is_hr"].sum() / max(games, 1)),
-                            "avg_ev":      float(sub["launch_speed"].mean()) if "launch_speed" in sub.columns else 0,
-                            "n":           len(sub),
+                            "barrel_rate":    float(sub["barrel"].mean()),
+                            "sweet_spot_rate": sweet_spot_pt,
+                            "hard_hit_rate":  hh_pt,
+                            "hr_rate":        float(sub["is_hr"].sum() / max(games, 1)),
+                            "avg_ev":         float(sub["launch_speed"].mean()) if "launch_speed" in sub.columns else 0,
+                            "n":              len(sub),
                         }
 
             # Velocity matchup
@@ -554,8 +558,7 @@ class HITScoreEngine:
 
     def compute_pitch_matchup(self, batter_id: int, pitcher_id: int) -> dict:
         """
-        Pitch type matchup — batter barrel rate vs pitcher's primary pitches.
-        This is the key edge signal.
+        Pitch type matchup — batter barrel%, sweet spot%, HH% vs pitcher's primary pitches.
         """
         b = self._batter_index.get(int(batter_id), {})
         p = self._pitcher_index.get(int(pitcher_id), {})
@@ -566,16 +569,28 @@ class HITScoreEngine:
         pitch_mix  = p.get("pitch_mix", {})
         pt_barrels = b.get("pt_barrels", {})
 
-        # Weight batter's barrel rate by pitcher's pitch usage
+        # Weight batter metrics by pitcher's pitch usage
         fb_pct  = sum(v["pct"] for k,v in pitch_mix.items() if k in FASTBALL_TYPES)
         brk_pct = sum(v["pct"] for k,v in pitch_mix.items() if k in BREAKING_TYPES)
         off_pct = sum(v["pct"] for k,v in pitch_mix.items() if k in OFFSPEED_TYPES)
 
+        # Barrel rate by pitch type
         fb_brl  = pt_barrels.get("fb",  {}).get("barrel_rate", 0.06)
         brk_brl = pt_barrels.get("brk", {}).get("barrel_rate", 0.06)
         off_brl = pt_barrels.get("off", {}).get("barrel_rate", 0.06)
-
         weighted_barrel = fb_pct * fb_brl + brk_pct * brk_brl + off_pct * off_brl
+
+        # Sweet spot% by pitch type — hitting optimal launch angle
+        fb_ss  = pt_barrels.get("fb",  {}).get("sweet_spot_rate", 0.30)
+        brk_ss = pt_barrels.get("brk", {}).get("sweet_spot_rate", 0.30)
+        off_ss = pt_barrels.get("off", {}).get("sweet_spot_rate", 0.30)
+        weighted_sweet_spot = fb_pct * fb_ss + brk_pct * brk_ss + off_pct * off_ss
+
+        # HH% by pitch type
+        fb_hh  = pt_barrels.get("fb",  {}).get("hard_hit_rate", 0.38)
+        brk_hh = pt_barrels.get("brk", {}).get("hard_hit_rate", 0.38)
+        off_hh = pt_barrels.get("off", {}).get("hard_hit_rate", 0.38)
+        weighted_hh = fb_pct * fb_hh + brk_pct * brk_hh + off_pct * off_hh
 
         # Velocity matchup bonus
         vel_band = p.get("vel_band", "med")
@@ -583,30 +598,43 @@ class HITScoreEngine:
         vel_bonus = vel_hrs.get(vel_band, 0) / max(b.get("hr_rate", 0.05), 0.01)
         vel_bonus = min(vel_bonus, 2.0)
 
-        # Find edge pitch (where batter has biggest barrel rate vs pitcher's usage)
+        # Combined matchup score — barrel 50%, sweet spot 30%, HH 20%
+        contact_score = (
+            min(weighted_barrel / 0.12, 1.0) * 0.50 +
+            min(weighted_sweet_spot / 0.38, 1.0) * 0.30 +
+            min(weighted_hh / 0.48, 1.0) * 0.20
+        )
+
+        # Find edge pitch
         edge_pitch = None
         edge_score = 0
         for pt_group, pt_data in pt_barrels.items():
             group_pct = {"fb": fb_pct, "brk": brk_pct, "off": off_pct}.get(pt_group, 0)
-            score = pt_data["barrel_rate"] * group_pct
+            # Score edge by combined barrel + sweet spot vs this pitch group
+            score = (pt_data["barrel_rate"] * 0.6 + pt_data.get("sweet_spot_rate", 0.3) * 0.4) * group_pct
             if score > edge_score:
                 edge_score = score
                 edge_pitch = pt_group
 
-        score = min(weighted_barrel / 0.12, 1.0) * 0.7 + min((vel_bonus - 1) * 0.5, 0.3)
+        score = min(contact_score * 0.7 + min((vel_bonus - 1) * 0.5, 0.3), 1.0)
 
         return {
-            "pitch_matchup_score": round(score, 3),
-            "weighted_barrel":     round(weighted_barrel, 3),
-            "fb_pct":              round(fb_pct, 2),
-            "brk_pct":             round(brk_pct, 2),
-            "off_pct":             round(off_pct, 2),
-            "fb_barrel":           round(fb_brl, 3),
-            "brk_barrel":          round(brk_brl, 3),
-            "off_barrel":          round(off_brl, 3),
-            "vel_band":            vel_band,
-            "vel_bonus":           round(vel_bonus, 2),
-            "edge_pitch":          edge_pitch,
+            "pitch_matchup_score":   round(score, 3),
+            "weighted_barrel":       round(weighted_barrel, 3),
+            "weighted_sweet_spot":   round(weighted_sweet_spot, 3),
+            "weighted_hh":           round(weighted_hh, 3),
+            "fb_pct":                round(fb_pct, 2),
+            "brk_pct":               round(brk_pct, 2),
+            "off_pct":               round(off_pct, 2),
+            "fb_barrel":             round(fb_brl, 3),
+            "brk_barrel":            round(brk_brl, 3),
+            "off_barrel":            round(off_brl, 3),
+            "fb_sweet_spot":         round(fb_ss, 3),
+            "brk_sweet_spot":        round(brk_ss, 3),
+            "off_sweet_spot":        round(off_ss, 3),
+            "vel_band":              vel_band,
+            "vel_bonus":             round(vel_bonus, 2),
+            "edge_pitch":            edge_pitch,
         }
 
     def compute_hit_score(
