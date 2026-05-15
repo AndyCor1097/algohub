@@ -914,10 +914,69 @@ def main():
     # ── TAB 2: Zone Maps ───────────────────────────────────────────────────────
     with tab2:
         st.markdown("#### ⚡ Zone Analysis")
-        all_batters = home_batters + away_batters
-        if all_batters:
-            sel_name = st.selectbox("Select batter", [p["player_name"] for p in all_batters])
-            sel_player = next((p for p in all_batters if p["player_name"] == sel_name), None)
+
+        # Get batters from precomputed or live
+        if precomputed:
+            all_batters_zone = g.get("home_batters", []) + g.get("away_batters", [])
+        else:
+            all_batters_zone = home_batters + away_batters
+
+        if not all_batters_zone:
+            st.info("No batter data available.")
+        elif not engine and precomputed:
+            # Precomputed mode — show simplified breakdown from stored data
+            sel_name = st.selectbox("Select batter", [p["player_name"] for p in all_batters_zone])
+            sel_player = next((p for p in all_batters_zone if p["player_name"] == sel_name), None)
+            if sel_player:
+                is_home = sel_player in g.get("home_batters", [])
+                pitcher_name = g.get("away_pitcher","TBD") if is_home else g.get("home_pitcher","TBD")
+
+                m1,m2,m3,m4,m5,m6 = st.columns(6)
+                m1.metric("ALGO Score", f"{sel_player.get('hit_score',0):.0f}/100")
+                m2.metric("Grade", sel_player.get("grade","—"))
+                m3.metric("Zone Count", f"⚡{sel_player.get('zone_count',0)}")
+                m4.metric("Zone Fit", f"{sel_player.get('zone_fit',0)*100:.0f}%")
+                m5.metric("Barrel%", f"{sel_player.get('barrel_rate',0):.1f}%")
+                m6.metric("Proj HR%", f"{sel_player.get('proj_hr_pct',0):.1f}%")
+
+                # Score breakdown from precomputed data
+                st.markdown("#### Score Breakdown")
+                breakdown = pd.DataFrame({
+                    "Component": ["Barrel","Hard Hit","xwOBA","LA%","FB%","HR/FB","EV","Pull","SwStr","Pitcher","Platoon","Env","Hot Bat"],
+                    "Score": [
+                        sel_player.get("barrel_score", 0),
+                        sel_player.get("hh_score", 0),
+                        sel_player.get("xwoba_score", 0),
+                        sel_player.get("la_score", 0),
+                        sel_player.get("fb_score", 0),
+                        sel_player.get("hrfb_score", 0),
+                        sel_player.get("ev_score", 0),
+                        sel_player.get("pull_score", 0),
+                        sel_player.get("swstr_bonus", 0),
+                        sel_player.get("pitcher_score", 0),
+                        sel_player.get("platoon_score", 0),
+                        sel_player.get("env_score", 0),
+                        sel_player.get("form_score", 0),
+                    ],
+                    "Max": [15, 10, 10, 6, 5, 7, 5, 3, 4, 18, 8, 8, 4],
+                })
+                breakdown["Pct"] = breakdown.apply(lambda r: r["Score"]/r["Max"] if r["Max"] > 0 else 0, axis=1)
+                fig = px.bar(breakdown, x="Component", y="Score", color="Pct",
+                             color_continuous_scale=["#7f1d1d","#f59e0b","#22c55e"],
+                             range_color=[0,1], text="Score")
+                fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+                fig.update_layout(
+                    plot_bgcolor="#06080f", paper_bgcolor="#06080f",
+                    font_color="#94a3b8", showlegend=False,
+                    coloraxis_showscale=False, margin=dict(t=20,b=20),
+                    xaxis=dict(tickfont=dict(size=10)),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.info("⚡ Zone heatmaps available in live mode — zone maps require the Statcast engine.")
+        else:
+            sel_name = st.selectbox("Select batter", [p["player_name"] for p in all_batters_zone])
+            sel_player = next((p for p in all_batters_zone if p["player_name"] == sel_name), None)
             if sel_player and engine:
                 bid = sel_player["player_id"]
                 is_home = sel_player in home_batters
