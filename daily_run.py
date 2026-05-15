@@ -437,6 +437,22 @@ def main():
                     "ev_7":           hit_data.get("ev_7", 0),
                     "k_score":        k_data.get("k_score", 50),
                     "k_grade":        k_data.get("grade", "MODERATE"),
+                    # Component scores for Zone Maps breakdown
+                    "barrel_score":   hit_data.get("barrel_score", 0),
+                    "hh_score":       hit_data.get("hh_score", 0),
+                    "xwoba_score":    hit_data.get("xwoba_score", 0),
+                    "la_score":       hit_data.get("la_score", 0),
+                    "fb_score":       hit_data.get("fb_score", 0),
+                    "hrfb_score":     hit_data.get("hrfb_score", 0),
+                    "ev_score":       hit_data.get("ev_score", 0),
+                    "pull_score":     hit_data.get("pull_score", 0),
+                    "swstr_bonus":    hit_data.get("swstr_bonus", 0),
+                    "bat_speed_bonus": hit_data.get("bat_speed_bonus", 0),
+                    "squared_bonus":  hit_data.get("squared_bonus", 0),
+                    "chase_penalty":  hit_data.get("chase_penalty", 0),
+                    "pitcher_score":  hit_data.get("pitcher_score", 0),
+                    "env_score":      hit_data.get("env_score", 0),
+                    "form_score":     hit_data.get("form_score", 0),
                 })
             results.sort(key=lambda x: x["hit_score"], reverse=True)
             return results
