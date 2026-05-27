@@ -905,7 +905,7 @@ class HITScoreEngine:
 
             # Pitcher raw stats
             "pitcher_era":          round(p_era, 2),
-            "pitcher_hr_fb":        round(p_hr9 * 100, 1),
+            "pitcher_hr_fb":        round(p_hr_fb * 100, 1),
             "pitcher_hard_allowed": round(p_hard * 100, 1),
             "pitcher_swstr":        round(p.get("swstr_rate", 0) * 100, 1) if p else 0,
             "pitcher_primary_vel":  p.get("primary_vel", 0) if p else 0,
