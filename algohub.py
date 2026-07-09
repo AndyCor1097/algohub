@@ -1276,7 +1276,7 @@ def main():
                     hh       = b.get("hard_hit_pct", 0)
                     ev       = b.get("avg_ev", 0)
                     xwoba    = b.get("xwoba") or 0
-                    iso      = b.get("iso", 0)
+                    iso      = b.get("iso", b.get("iso_proxy", 0))
                     heat     = b.get("heat_score", 0)
                     platoon  = b.get("platoon_score", 0)
                     zf       = b.get("zone_fit", 0)
@@ -1312,7 +1312,7 @@ def main():
                             </div>
                             <div style="text-align:center;">
                                 <div style="color:#475569;font-size:.6rem">BBL%</div>
-                                <div style="color:{'#22c55e' if brl>=0.15 else '#f59e0b' if brl>=0.08 else '#94a3b8'}">{brl*100:.1f}%</div>
+                                <div style="color:{'#22c55e' if brl>=15 else '#f59e0b' if brl>=8 else '#94a3b8'}">{brl:.1f}%</div>
                             </div>
                             <div style="text-align:center;">
                                 <div style="color:#475569;font-size:.6rem">HH%</div>

@@ -896,6 +896,7 @@ class HITScoreEngine:
             # Batter raw stats
             "barrel_rate":    round(barrel * 100, 1),
             "hard_hit_pct":   round(hard_hit * 100, 1),
+            "iso_proxy":      round(b.get("iso_proxy", 0), 3),
             "xwoba":          round(xwoba, 3) if xwoba else None,
             "la_consistency": round(la_cons * 100, 1),
             "fb_rate":        round(fb_rate * 100, 1),
