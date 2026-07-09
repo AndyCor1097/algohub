@@ -389,10 +389,13 @@ class HITScoreEngine:
                 hr_14 = 0
                 hr_14_rate = 0.0
 
-            # ISO proxy — from Statcast estimated SLG - estimated BA
-            # Use woba as proxy since we don't have direct SLG/BA
-            # Instead calculate from HR rate and hard hit — higher = more ISO
-            iso_proxy = float(hrs / max(len(grp), 1)) * 4 + float(pd.to_numeric(grp["barrel"], errors="coerce").fillna(0).mean()) * 2
+            # ISO — power metric: extra bases per AB
+            # Estimate: (2B*2 + 3B*3 + HR*4) / total BIP as proxy
+            xiso = float(pd.to_numeric(grp.get("estimated_slg_using_speedangle", pd.Series(dtype=float)), errors="coerce").fillna(0).mean()) if "estimated_slg_using_speedangle" in grp.columns else 0
+            iso_val = round(float(hrs * 4 + grp.get("iso_proxy", pd.Series(dtype=float)).mean()) / max(len(grp), 1), 3) if "iso_proxy" not in grp.columns else round(iso_proxy, 3)
+
+            # ISO proxy — from HR rate and barrel rate (best we can do without SLG/AVG)
+            iso_proxy = round(float(hrs / max(len(grp), 1)) * 3 + float(pd.to_numeric(grp["barrel"], errors="coerce").fillna(0).mean()) * 1.5, 3)
 
             self._batter_index[int(pid)] = {
                 "games":          int(games),
@@ -416,6 +419,7 @@ class HITScoreEngine:
                 "hr_14_rate":     round(hr_14_rate, 3),
                 "hr_14":          hr_14,
                 "iso_proxy":      round(iso_proxy, 3),
+                "xiso":           round(xiso, 3),
                 "swstr_rate":     swstr_rate,
                 "swstr_by_pt":    swstr_by_pt,
                 "chase_rate":     round(chase_rate, 3),
@@ -490,11 +494,22 @@ class HITScoreEngine:
                 k_count = int((pitcher_raw["events"] == "strikeout").sum())
             k_rate = round(k_count / max(games, 1), 2)
 
+            # HR/9 innings — HRs per 9 innings pitched
+            # Estimate innings from games * avg IP (use 6 IP per game as estimate)
+            estimated_ip = games * 5.5
+            hr9 = round(float(hr_alw) / max(estimated_ip, 1) * 9, 2)
+
+            # FB% allowed
+            total_bip = len(grp)
+            fb_allowed_rate = round(fb_alw / max(total_bip, 1), 3)
+
             self._pitcher_index[int(pid)] = {
                 "games":            int(games),
                 "bip":              len(grp),
                 "hr_allowed":       int(hr_alw),
                 "hr_per_fb":        float(hr_alw / max(fb_alw, 1)),
+                "hr9":              hr9,
+                "fb_rate_allowed":  fb_allowed_rate,
                 "barrel_allowed":   float(pd.to_numeric(grp["barrel"], errors="coerce").fillna(0).mean()),
                 "hard_hit_allowed": float(pd.to_numeric(grp["hard_hit"], errors="coerce").fillna(0).mean()) if "hard_hit" in grp.columns else 0,
                 "zone_hrs_allowed": zone_hrs_allowed,
@@ -906,7 +921,12 @@ class HITScoreEngine:
             # Pitcher raw stats
             "pitcher_era":          round(p_era, 2),
             "pitcher_hr_fb":        round(p_hr_fb * 100, 1),
-            "pitcher_hard_allowed": round(p_hard * 100, 1),
+            "pitcher_hr9":          round(p.get("hr9", 0), 2) if p else 0,
+            "pitcher_hr_total":     int(p.get("hr_allowed", 0)) if p else 0,
+            "pitcher_brl_allowed":  round(p.get("barrel_allowed", 0) * 100, 1) if p else 0,
+            "pitcher_hh_allowed":   round(p.get("hard_hit_allowed", 0) * 100, 1) if p else 0,
+            "pitcher_fb_allowed":   round(p.get("fb_rate_allowed", 0) * 100, 1) if p else 0,
+            "pitcher_hard_allowed": round(p.get("hard_hit_allowed", 0) * 100 if p else 0, 1),
             "pitcher_swstr":        round(p.get("swstr_rate", 0) * 100, 1) if p else 0,
             "pitcher_primary_vel":  p.get("primary_vel", 0) if p else 0,
             "pitcher_bip":          p.get("bip", 0) if p else 0,

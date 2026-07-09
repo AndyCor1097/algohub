@@ -419,6 +419,8 @@ def main():
                     "barrel_rate":    hit_data["barrel_rate"],
                     "hard_hit_pct":   hit_data["hard_hit_pct"],
                     "xwoba":          hit_data["xwoba"],
+                    "iso":            hit_data.get("iso_proxy", 0),
+                    "xiso":           hit_data.get("xiso", 0),
                     "la_consistency": hit_data["la_consistency"],
                     "fb_rate":        hit_data.get("fb_rate", 0),
                     "hr_fb_rate":     hit_data.get("hr_fb_rate", 0),
@@ -437,6 +439,12 @@ def main():
                     "ev_7":           hit_data.get("ev_7", 0),
                     "k_score":        k_data.get("k_score", 50),
                     "k_grade":        k_data.get("grade", "MODERATE"),
+                    # Pitcher matchup stats for cards
+                    "pitcher_hr9":        hit_data.get("pitcher_hr9", 0),
+                    "pitcher_hr_total":   hit_data.get("pitcher_hr_total", 0),
+                    "pitcher_brl_allowed": hit_data.get("pitcher_brl_allowed", 0),
+                    "pitcher_hh_allowed": hit_data.get("pitcher_hh_allowed", 0),
+                    "pitcher_fb_allowed": hit_data.get("pitcher_fb_allowed", 0),
                     # Component scores for Zone Maps breakdown
                     "barrel_score":   hit_data.get("barrel_score", 0),
                     "hh_score":       hit_data.get("hh_score", 0),

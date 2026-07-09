@@ -861,7 +861,7 @@ def main():
     """, unsafe_allow_html=True)
 
     # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["💣 HR Board", "⚡ Zone Maps", "🎳 K Props", "🎰 Parlay Builder"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["💣 HR Board", "⚡ Zone Maps", "🎳 K Props", "🎰 Parlay Builder", "🎯 Matchups"])
 
     # Load rosters and pitcher data
     if precomputed:
@@ -1245,6 +1245,128 @@ def main():
                 legs_text = "\n".join([f"{l['player_name']} {'+'+str(l['odds']) if l.get('odds') and l['odds']>0 else ''} ✅" for l in legs])
                 tweet = f"💣 HR PARLAY\n\n{legs_text}\n\n{odds_disp} 🔒 AlgoHub locked in\n\n@TheAlgoHub | #MLBProps #HomeRun"
                 st.code(tweet, language=None)
+
+    # ── TAB 5: Matchup Cards ───────────────────────────────────────────────────
+    with tab5:
+        st.markdown("#### 🎯 HR Game Matchup Cards")
+        st.caption("Pitcher stats vs top HR threats — updated daily")
+
+        if not precomputed:
+            st.info("Run `python daily_run.py` to enable Matchup Cards.")
+        else:
+            for g_item in games:
+                home  = g_item.get("home_team", "")
+                away  = g_item.get("away_team", "")
+                home_pitcher = g_item.get("home_pitcher", "TBD")
+                away_pitcher = g_item.get("away_pitcher", "TBD")
+                home_era = g_item.get("home_pitcher_era", 0)
+                away_era = g_item.get("away_pitcher_era", 0)
+                home_batters = g_item.get("home_batters", [])
+                away_batters = g_item.get("away_batters", [])
+
+                def pitcher_color(era):
+                    if era >= 5.0:   return "#ef4444"
+                    elif era >= 4.0: return "#f59e0b"
+                    else:            return "#22c55e"
+
+                def batter_card(b, opp_pitcher, opp_era):
+                    name     = b.get("player_name", "")
+                    algo     = b.get("hit_score", 0)
+                    brl      = b.get("barrel_rate", 0)
+                    hh       = b.get("hard_hit_pct", 0)
+                    ev       = b.get("avg_ev", 0)
+                    xwoba    = b.get("xwoba") or 0
+                    iso      = b.get("iso", 0)
+                    heat     = b.get("heat_score", 0)
+                    platoon  = b.get("platoon_score", 0)
+                    zf       = b.get("zone_fit", 0)
+                    bat_side = b.get("bat_side", "R")
+                    edge     = b.get("edge_pitch", "")
+                    p_hr9    = b.get("pitcher_hr9", 0)
+                    p_brl    = b.get("pitcher_brl_allowed", 0)
+                    p_hh     = b.get("pitcher_hh_allowed", 0)
+                    p_fb     = b.get("pitcher_fb_allowed", 0)
+                    p_total  = b.get("pitcher_hr_total", 0)
+
+                    hot_icon = "🔥" if heat >= 0.15 else "🌡️" if heat >= 0.05 else "❄️"
+                    platoon_badge = '<span style="background:#1d4ed8;color:#fff;font-size:.6rem;padding:1px 5px;border-radius:3px;margin-left:4px">✓ Platoon</span>' if platoon > 2 else ""
+                    in_weak_spot = zf >= 0.6
+                    spot_badge = '<span style="background:#854d0e;color:#fef3c7;font-size:.6rem;padding:1px 5px;border-radius:3px;margin-left:4px">★ Weak Spot</span>' if in_weak_spot else ""
+
+                    algo_color = "#ef4444" if algo >= 65 else "#f59e0b" if algo >= 50 else "#475569"
+
+                    return f"""
+                    <div style="background:#0c1018;border:1px solid #1c2333;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                            <div>
+                                <span style="font-weight:700;font-size:.9rem">{hot_icon} {name}</span>
+                                <span style="font-size:.65rem;color:#475569;margin-left:6px">{bat_side}HB</span>
+                                {platoon_badge}{spot_badge}
+                            </div>
+                            <span style="font-family:'DM Mono',monospace;font-size:1.1rem;font-weight:700;color:{algo_color}">{algo:.0f}</span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-family:'DM Mono',monospace;font-size:.7rem;">
+                            <div style="text-align:center;">
+                                <div style="color:#475569;font-size:.6rem">ISO</div>
+                                <div style="color:{'#22c55e' if iso>=0.18 else '#f59e0b' if iso>=0.12 else '#94a3b8'}">{iso:.3f}</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="color:#475569;font-size:.6rem">BBL%</div>
+                                <div style="color:{'#22c55e' if brl>=0.15 else '#f59e0b' if brl>=0.08 else '#94a3b8'}">{brl*100:.1f}%</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="color:#475569;font-size:.6rem">HH%</div>
+                                <div style="color:{'#22c55e' if hh>=50 else '#f59e0b' if hh>=38 else '#94a3b8'}">{hh:.1f}%</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="color:#475569;font-size:.6rem">EV</div>
+                                <div style="color:{'#22c55e' if ev>=92 else '#f59e0b' if ev>=88 else '#94a3b8'}">{ev:.1f}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """
+
+                # Render game card
+                st.markdown(f"""
+                <div style="border:1px solid #1c2333;border-radius:10px;padding:14px;margin-bottom:16px;background:#060810;">
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;color:#94a3b8;margin-bottom:10px;letter-spacing:.05em">
+                        {away} @ {home}
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div>
+                            <div style="background:#0c1018;border-radius:6px;padding:8px 10px;margin-bottom:8px;">
+                                <div style="font-size:.6rem;color:#475569;font-family:'DM Mono',monospace;letter-spacing:.1em">PITCHER</div>
+                                <div style="font-weight:700;font-size:.9rem">{away_pitcher}</div>
+                                <div style="display:flex;gap:12px;margin-top:4px;font-family:'DM Mono',monospace;font-size:.7rem;">
+                                    <span>ERA <span style="color:{pitcher_color(away_era)}">{away_era:.2f}</span></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="background:#0c1018;border-radius:6px;padding:8px 10px;margin-bottom:8px;">
+                                <div style="font-size:.6rem;color:#475569;font-family:'DM Mono',monospace;letter-spacing:.1em">PITCHER</div>
+                                <div style="font-weight:700;font-size:.9rem">{home_pitcher}</div>
+                                <div style="display:flex;gap:12px;margin-top:4px;font-family:'DM Mono',monospace;font-size:.7rem;">
+                                    <span>ERA <span style="color:{pitcher_color(home_era)}">{home_era:.2f}</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Top 2 batters per side
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.caption(f"🏟️ {home} BATTERS vs {away_pitcher}")
+                    for b in home_batters[:3]:
+                        st.markdown(batter_card(b, away_pitcher, away_era), unsafe_allow_html=True)
+                with col2:
+                    st.caption(f"🏟️ {away} BATTERS vs {home_pitcher}")
+                    for b in away_batters[:3]:
+                        st.markdown(batter_card(b, home_pitcher, home_era), unsafe_allow_html=True)
+
+                st.divider()
 
     # ── Full Slate CSV Export ──────────────────────────────────────────────────
     if precomputed:
