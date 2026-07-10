@@ -1270,7 +1270,7 @@ def main():
                     else:            return "#22c55e"
 
                 def batter_card(b, opp_pitcher, opp_era):
-                    name     = b.get("player_name", "")
+                    name     = b.get("player_name", "").replace("'", "&#39;").replace('"', "&quot;")
                     algo     = b.get("hit_score", 0)
                     brl      = b.get("barrel_rate", 0)
                     hh       = b.get("hard_hit_pct", 0)
@@ -1281,50 +1281,36 @@ def main():
                     platoon  = b.get("platoon_score", 0)
                     zf       = b.get("zone_fit", 0)
                     bat_side = b.get("bat_side", "R")
-                    edge     = b.get("edge_pitch", "")
-                    p_hr9    = b.get("pitcher_hr9", 0)
-                    p_brl    = b.get("pitcher_brl_allowed", 0)
-                    p_hh     = b.get("pitcher_hh_allowed", 0)
-                    p_fb     = b.get("pitcher_fb_allowed", 0)
-                    p_total  = b.get("pitcher_hr_total", 0)
 
-                    hot_icon = "🔥" if heat >= 0.15 else "🌡️" if heat >= 0.05 else "❄️"
-                    platoon_badge = '<span style="background:#1d4ed8;color:#fff;font-size:.6rem;padding:1px 5px;border-radius:3px;margin-left:4px">✓ Platoon</span>' if platoon > 2 else ""
-                    in_weak_spot = zf >= 0.6
-                    spot_badge = '<span style="background:#854d0e;color:#fef3c7;font-size:.6rem;padding:1px 5px;border-radius:3px;margin-left:4px">★ Weak Spot</span>' if in_weak_spot else ""
+                    hot_icon   = "🔥" if heat >= 0.15 else "🌡️" if heat >= 0.05 else "❄️"
+                    platoon_txt = " ✓ Platoon" if platoon > 2 else ""
+                    spot_txt    = " ★ Weak Spot" if zf >= 0.6 else ""
+                    badges = ""
+                    if platoon > 2:
+                        badges += '<span style="background:#1d4ed8;color:#fff;font-size:.6rem;padding:1px 5px;border-radius:3px;margin-left:4px">✓ Platoon</span>'
+                    if zf >= 0.6:
+                        badges += '<span style="background:#854d0e;color:#fef3c7;font-size:.6rem;padding:1px 5px;border-radius:3px;margin-left:4px">★ Weak Spot</span>'
 
-                    algo_color = "#ef4444" if algo >= 65 else "#f59e0b" if algo >= 50 else "#475569"
+                    algo_color  = "#ef4444" if algo >= 65 else "#f59e0b" if algo >= 50 else "#475569"
+                    iso_color   = "#22c55e" if iso >= 0.18 else "#f59e0b" if iso >= 0.12 else "#94a3b8"
+                    brl_color   = "#22c55e" if brl >= 15 else "#f59e0b" if brl >= 8 else "#94a3b8"
+                    hh_color    = "#22c55e" if hh >= 50 else "#f59e0b" if hh >= 38 else "#94a3b8"
+                    ev_color    = "#22c55e" if ev >= 92 else "#f59e0b" if ev >= 88 else "#94a3b8"
 
-                    return f"""
-                    <div style="background:#0c1018;border:1px solid #1c2333;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                            <div>
-                                <span style="font-weight:700;font-size:.9rem">{hot_icon} {name}</span>
-                                <span style="font-size:.65rem;color:#475569;margin-left:6px">{bat_side}HB</span>
-                                {platoon_badge}{spot_badge}
-                            </div>
-                            <span style="font-family:'DM Mono',monospace;font-size:1.1rem;font-weight:700;color:{algo_color}">{algo:.0f}</span>
-                        </div>
-                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-family:'DM Mono',monospace;font-size:.7rem;">
-                            <div style="text-align:center;">
-                                <div style="color:#475569;font-size:.6rem">ISO</div>
-                                <div style="color:{'#22c55e' if iso>=0.18 else '#f59e0b' if iso>=0.12 else '#94a3b8'}">{iso:.3f}</div>
-                            </div>
-                            <div style="text-align:center;">
-                                <div style="color:#475569;font-size:.6rem">BBL%</div>
-                                <div style="color:{'#22c55e' if brl>=15 else '#f59e0b' if brl>=8 else '#94a3b8'}">{brl:.1f}%</div>
-                            </div>
-                            <div style="text-align:center;">
-                                <div style="color:#475569;font-size:.6rem">HH%</div>
-                                <div style="color:{'#22c55e' if hh>=50 else '#f59e0b' if hh>=38 else '#94a3b8'}">{hh:.1f}%</div>
-                            </div>
-                            <div style="text-align:center;">
-                                <div style="color:#475569;font-size:.6rem">EV</div>
-                                <div style="color:{'#22c55e' if ev>=92 else '#f59e0b' if ev>=88 else '#94a3b8'}">{ev:.1f}</div>
-                            </div>
-                        </div>
-                    </div>
-                    """
+                    return (
+                        f'<div style="background:#0c1018;border:1px solid #1c2333;border-radius:8px;padding:10px 12px;margin-bottom:6px;">'
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                        f'<div><span style="font-weight:700;font-size:.9rem">{hot_icon} {name}</span>'
+                        f'<span style="font-size:.65rem;color:#475569;margin-left:6px">{bat_side}HB</span>{badges}</div>'
+                        f'<span style="font-family:\'DM Mono\',monospace;font-size:1.1rem;font-weight:700;color:{algo_color}">{algo:.0f}</span>'
+                        f'</div>'
+                        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-family:\'DM Mono\',monospace;font-size:.7rem;">'
+                        f'<div style="text-align:center;"><div style="color:#475569;font-size:.6rem">ISO</div><div style="color:{iso_color}">{iso:.3f}</div></div>'
+                        f'<div style="text-align:center;"><div style="color:#475569;font-size:.6rem">BBL%</div><div style="color:{brl_color}">{brl:.1f}%</div></div>'
+                        f'<div style="text-align:center;"><div style="color:#475569;font-size:.6rem">HH%</div><div style="color:{hh_color}">{hh:.1f}%</div></div>'
+                        f'<div style="text-align:center;"><div style="color:#475569;font-size:.6rem">EV</div><div style="color:{ev_color}">{ev:.1f}</div></div>'
+                        f'</div></div>'
+                    )
 
                 # Render game card
                 st.markdown(f"""

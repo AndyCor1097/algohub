@@ -394,8 +394,11 @@ class HITScoreEngine:
             xiso = float(pd.to_numeric(grp.get("estimated_slg_using_speedangle", pd.Series(dtype=float)), errors="coerce").fillna(0).mean()) if "estimated_slg_using_speedangle" in grp.columns else 0
             iso_val = round(float(hrs * 4 + grp.get("iso_proxy", pd.Series(dtype=float)).mean()) / max(len(grp), 1), 3) if "iso_proxy" not in grp.columns else round(iso_proxy, 3)
 
-            # ISO proxy — from HR rate and barrel rate (best we can do without SLG/AVG)
-            iso_proxy = round(float(hrs / max(len(grp), 1)) * 3 + float(pd.to_numeric(grp["barrel"], errors="coerce").fillna(0).mean()) * 1.5, 3)
+            # ISO proxy — estimated from HR rate + barrel rate, calibrated to real ISO range
+            # Real ISO avg ~0.150, elite ~0.250-0.300
+            hr_rate_val = float(hrs / max(len(grp), 1))
+            brl_rate_val = float(pd.to_numeric(grp["barrel"], errors="coerce").fillna(0).mean())
+            iso_proxy = round(hr_rate_val * 2.5 + brl_rate_val * 0.8, 3)
 
             self._batter_index[int(pid)] = {
                 "games":          int(games),
