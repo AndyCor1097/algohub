@@ -861,7 +861,7 @@ def main():
     """, unsafe_allow_html=True)
 
     # Tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["💣 HR Board", "⚡ Zone Maps", "🎳 K Props", "🎰 Parlay Builder", "🎯 Matchups"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💣 HR Board", "⚡ Zone Maps", "🎳 K Props", "🎰 Parlay Builder", "🎯 Matchups", "🎲 Simulations"])
 
     # Load rosters and pitcher data
     if precomputed:
@@ -1353,6 +1353,351 @@ def main():
                         st.markdown(batter_card(b, home_pitcher, home_era), unsafe_allow_html=True)
 
                 st.divider()
+
+    # ── TAB 6: Simulations ─────────────────────────────────────────────────────
+    with tab6:
+        import random, math
+
+        st.markdown("#### 🎲 Tonight's AB Simulations")
+        st.caption("Simulating each batter's at-bats vs tonight's starting pitcher using pitch mix + barrel rates")
+
+        if not precomputed:
+            st.info("Run `python daily_run.py` to enable Simulations.")
+        else:
+            # Simulation engine
+            PITCH_COLORS = {"fb": "#ef4444", "brk": "#3b82f6", "off": "#a855f7"}
+            PITCH_NAMES  = {
+                "fb":  ["Fastball", "Sinker", "Cutter"],
+                "brk": ["Slider", "Curveball", "Sweeper"],
+                "off": ["Changeup", "Splitter"],
+            }
+
+            def simulate_ab(batter: dict, pitcher_name: str, park_factor: float = 1.0) -> dict:
+                """Simulate one at-bat using pitch mix and barrel rates."""
+                pt = batter.get("pt_barrels", {})
+                pitch_mix = batter.get("pitch_mix_opp", {"fb": 0.50, "brk": 0.30, "off": 0.20})
+
+                # Pick pitch type based on pitcher mix
+                rand = random.random()
+                cumulative = 0
+                chosen_pt = "fb"
+                for pt_group, pct in pitch_mix.items():
+                    cumulative += pct
+                    if rand < cumulative:
+                        chosen_pt = pt_group
+                        break
+
+                # Get batter metrics vs this pitch type
+                pt_data    = pt.get(chosen_pt, {})
+                barrel_rate = pt_data.get("barrel_rate", batter.get("barrel_rate", 0.08) / 100)
+                hh_rate    = pt_data.get("hard_hit_rate", batter.get("hard_hit_pct", 38) / 100)
+                sweet_spot = pt_data.get("sweet_spot_rate", 0.28)
+                hr_fb_rate = batter.get("hr_fb_rate", 0) / 100 if batter.get("hr_fb_rate", 0) > 1 else batter.get("hr_fb_rate", 0.10)
+                pull_rate  = batter.get("pull_rate", 40) / 100 if batter.get("pull_rate", 40) > 1 else batter.get("pull_rate", 0.40)
+                heat       = batter.get("heat_score", 0)
+                heat_mult  = 1.0 + max(heat, 0) * 0.3
+
+                # Simulate contact quality
+                r = random.random() * heat_mult
+                barrel_thresh  = barrel_rate * park_factor * heat_mult
+                hh_thresh      = barrel_thresh + (hh_rate - barrel_rate) * 0.6
+                contact_thresh = hh_thresh + 0.35
+                swing_miss     = batter.get("swstr_rate", 0.10) if batter.get("swstr_rate", 0.10) < 1 else batter.get("swstr_rate", 0.10) / 100
+
+                # Pick pitch name and velo
+                pitch_name = random.choice(PITCH_NAMES.get(chosen_pt, ["Fastball"]))
+                if chosen_pt == "fb":
+                    velo = random.randint(91, 98)
+                elif chosen_pt == "brk":
+                    velo = random.randint(79, 88)
+                else:
+                    velo = random.randint(82, 90)
+
+                # Spray chart position
+                if pull_rate > 0.5:
+                    spray_x = random.uniform(0.15, 0.40)  # pull side
+                elif pull_rate < 0.35:
+                    spray_x = random.uniform(0.60, 0.85)  # oppo
+                else:
+                    spray_x = random.uniform(0.30, 0.70)  # center
+
+                # Outcome
+                if r < barrel_thresh:
+                    # Barrel — HR or extra base hit
+                    la = random.uniform(22, 35)
+                    ev = random.uniform(100, 115)
+                    hr_chance = hr_fb_rate * park_factor * (1 + max(heat, 0) * 0.2)
+                    if random.random() < hr_chance:
+                        dist = int(random.uniform(370, 450))
+                        spray_y = random.uniform(0.05, 0.25)  # over wall
+                        return {"result": "HR", "pitch": pitch_name, "velo": velo,
+                                "ev": ev, "la": la, "dist": dist,
+                                "spray_x": spray_x, "spray_y": spray_y,
+                                "pt": chosen_pt, "icon": "💣"}
+                    else:
+                        spray_y = random.uniform(0.30, 0.55)
+                        return {"result": "Double", "pitch": pitch_name, "velo": velo,
+                                "ev": ev, "la": la, "dist": 0,
+                                "spray_x": spray_x, "spray_y": spray_y,
+                                "pt": chosen_pt, "icon": "⚡"}
+                elif r < hh_thresh:
+                    la = random.uniform(5, 22)
+                    ev = random.uniform(95, 105)
+                    spray_y = random.uniform(0.45, 0.70)
+                    result = random.choice(["Single", "Single", "Lineout"])
+                    return {"result": result, "pitch": pitch_name, "velo": velo,
+                            "ev": ev, "la": la, "dist": 0,
+                            "spray_x": spray_x, "spray_y": spray_y,
+                            "pt": chosen_pt, "icon": "✅" if "Single" in result else "🔴"}
+                elif r < contact_thresh:
+                    la = random.uniform(-5, 15)
+                    ev = random.uniform(75, 94)
+                    spray_y = random.uniform(0.65, 0.90)
+                    result = random.choice(["Groundout", "Flyout", "Popout"])
+                    return {"result": result, "pitch": pitch_name, "velo": velo,
+                            "ev": ev, "la": la, "dist": 0,
+                            "spray_x": random.uniform(0.2, 0.8),
+                            "spray_y": spray_y,
+                            "pt": chosen_pt, "icon": "🔴"}
+                else:
+                    return {"result": "Strikeout", "pitch": pitch_name, "velo": velo,
+                            "ev": 0, "la": 0, "dist": 0,
+                            "spray_x": 0.5, "spray_y": 0.95,
+                            "pt": chosen_pt, "icon": "❌"}
+
+            # Park dimensions — LF, LCF, CF, RCF, RF wall distances in feet
+            PARK_DIMS = {
+                "Yankee Stadium":              {"LF":318,"LCF":399,"CF":408,"RCF":385,"RF":314,"name":"Yankee Stadium"},
+                "Fenway Park":                 {"LF":310,"LCF":379,"CF":420,"RCF":380,"RF":302,"name":"Fenway Park","monster":True},
+                "Wrigley Field":               {"LF":355,"LCF":368,"CF":400,"RCF":368,"RF":353,"name":"Wrigley Field"},
+                "Citizens Bank Park":          {"LF":329,"LCF":374,"CF":401,"RCF":369,"RF":330,"name":"Citizens Bank Park"},
+                "Great American Ball Park":    {"LF":328,"LCF":370,"CF":404,"RCF":370,"RF":325,"name":"Great American BP"},
+                "Truist Park":                 {"LF":335,"LCF":385,"CF":400,"RCF":375,"RF":325,"name":"Truist Park"},
+                "Dodger Stadium":              {"LF":330,"LCF":375,"CF":395,"RCF":375,"RF":330,"name":"Dodger Stadium"},
+                "Coors Field":                 {"LF":347,"LCF":390,"CF":415,"RCF":375,"RF":350,"name":"Coors Field"},
+                "Oracle Park":                 {"LF":339,"LCF":382,"CF":399,"RCF":421,"RF":309,"name":"Oracle Park"},
+                "T-Mobile Park":               {"LF":331,"LCF":378,"CF":401,"RCF":381,"RF":326,"name":"T-Mobile Park"},
+                "Petco Park":                  {"LF":336,"LCF":367,"CF":396,"RCF":391,"RF":322,"name":"Petco Park"},
+                "Chase Field":                 {"LF":330,"LCF":374,"CF":407,"RCF":374,"RF":335,"name":"Chase Field"},
+                "Globe Life Field":            {"LF":329,"LCF":372,"CF":407,"RCF":374,"RF":326,"name":"Globe Life Field"},
+                "Minute Maid Park":            {"LF":315,"LCF":362,"CF":409,"RCF":373,"RF":326,"name":"Minute Maid Park"},
+                "Kauffman Stadium":            {"LF":330,"LCF":387,"CF":410,"RCF":387,"RF":330,"name":"Kauffman Stadium"},
+                "Progressive Field":           {"LF":325,"LCF":370,"CF":405,"RCF":375,"RF":325,"name":"Progressive Field"},
+                "Oriole Park":                 {"LF":333,"LCF":364,"CF":400,"RCF":373,"RF":318,"name":"Oriole Park"},
+                "Comerica Park":               {"LF":345,"LCF":370,"CF":420,"RCF":365,"RF":330,"name":"Comerica Park"},
+                "Angel Stadium":               {"LF":333,"LCF":386,"CF":396,"RCF":370,"RF":330,"name":"Angel Stadium"},
+                "Guaranteed Rate Field":       {"LF":330,"LCF":377,"CF":400,"RCF":372,"RF":335,"name":"Rate Field"},
+                "Target Field":                {"LF":339,"LCF":377,"CF":404,"RCF":367,"RF":328,"name":"Target Field"},
+                "American Family Field":       {"LF":344,"LCF":371,"CF":400,"RCF":374,"RF":345,"name":"American Family Fld"},
+                "PNC Park":                    {"LF":325,"LCF":383,"CF":399,"RCF":375,"RF":320,"name":"PNC Park"},
+                "Busch Stadium":               {"LF":336,"LCF":375,"CF":400,"RCF":375,"RF":335,"name":"Busch Stadium"},
+                "Citi Field":                  {"LF":335,"LCF":379,"CF":408,"RCF":383,"RF":330,"name":"Citi Field"},
+                "loanDepot park":              {"LF":344,"LCF":386,"CF":418,"RCF":392,"RF":335,"name":"loanDepot Park"},
+                "Tropicana Field":             {"LF":315,"LCF":370,"CF":404,"RCF":370,"RF":322,"name":"Tropicana Field"},
+                "Nationals Park":              {"LF":336,"LCF":377,"CF":402,"RCF":370,"RF":335,"name":"Nationals Park"},
+                "Sutter Health Park":          {"LF":330,"LCF":362,"CF":403,"RCF":362,"RF":325,"name":"Sutter Health Park"},
+                "Las Vegas Ballpark":          {"LF":328,"LCF":370,"CF":400,"RCF":370,"RF":328,"name":"Las Vegas Ballpark"},
+                "Rogers Centre":               {"LF":328,"LCF":375,"CF":400,"RCF":375,"RF":328,"name":"Rogers Centre"},
+            }
+            DEFAULT_DIMS = {"LF":330,"LCF":375,"CF":400,"RCF":375,"RF":330}
+
+            def get_park_dims(venue: str) -> dict:
+                for name, dims in PARK_DIMS.items():
+                    if name.lower() in venue.lower() or venue.lower() in name.lower():
+                        return dims
+                return DEFAULT_DIMS
+
+            def wall_distance(angle_deg: float, dims: dict) -> float:
+                """Get wall distance at a given angle (0=CF, -45=LF, +45=RF)."""
+                a = abs(angle_deg)
+                if angle_deg < 0:  # left side
+                    if a < 15:   return dims.get("CF", 400)
+                    elif a < 30: return dims.get("LCF", 375)
+                    elif a < 45: return dims.get("LF", 330) + (dims.get("LCF",375)-dims.get("LF",330)) * (45-a)/15
+                    else:        return dims.get("LF", 330)
+                else:  # right side
+                    if a < 15:   return dims.get("CF", 400)
+                    elif a < 30: return dims.get("RCF", 375)
+                    elif a < 45: return dims.get("RF", 330) + (dims.get("RCF",375)-dims.get("RF",330)) * (45-a)/15
+                    else:        return dims.get("RF", 330)
+
+            def build_spray_svg(abs_results: list, bat_side: str = "R", venue: str = "") -> str:
+                """Build an SVG spray chart with park-specific wall dimensions."""
+                W, H = 300, 280
+                dims = get_park_dims(venue)
+                is_monster = dims.get("monster", False)
+
+                # Scale: CF 400ft = 110px from home
+                scale = 110 / dims.get("CF", 400)
+
+                def field_coords(angle_deg: float, dist_ft: float):
+                    """Convert angle + distance to SVG x,y."""
+                    rad = math.radians(angle_deg)
+                    px = 150 + math.sin(rad) * dist_ft * scale
+                    py = 230 - math.cos(rad) * dist_ft * scale
+                    return px, py
+
+                # Draw warning track / wall outline
+                wall_points = []
+                for ang in range(-50, 51, 5):
+                    wd = wall_distance(ang, dims)
+                    wx, wy = field_coords(ang, wd)
+                    wall_points.append(f"{wx:.0f},{wy:.0f}")
+                wall_path = " L ".join(wall_points)
+
+                # Foul lines
+                lf_x, lf_y = field_coords(-45, dims.get("LF", 330))
+                rf_x, rf_y = field_coords(45, dims.get("RF", 330))
+
+                svg = f'''<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" style="background:#06080f;border-radius:8px;border:1px solid #1c2333;">
+                    <!-- Outfield grass -->
+                    <path d="M 150 230 L {lf_x:.0f} {lf_y:.0f} L {wall_path} L {rf_x:.0f} {rf_y:.0f} Z" fill="#1a2e1a" stroke="none"/>
+                    <!-- Wall -->
+                    <polyline points="{lf_x:.0f},{lf_y:.0f} {wall_path} {rf_x:.0f},{rf_y:.0f}" fill="none" stroke="#22c55e" stroke-width="2.5" opacity="0.8"/>
+                    <!-- Infield dirt -->
+                    <path d="M 150 230 L 90 170 L 150 110 L 210 170 Z" fill="#3d2b1a" stroke="#5a3f25" stroke-width="1"/>
+                    <!-- Infield grass -->
+                    <path d="M 150 215 L 103 162 L 150 118 L 197 162 Z" fill="#1f3d1f" stroke="#2d4a2d" stroke-width="1"/>
+                    <!-- Foul lines -->
+                    <line x1="150" y1="230" x2="{lf_x:.0f}" y2="{lf_y:.0f}" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>
+                    <line x1="150" y1="230" x2="{rf_x:.0f}" y2="{rf_y:.0f}" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>
+                    <!-- Bases -->
+                    <rect x="145" y="225" width="10" height="10" fill="white" rx="1"/>
+                    <rect x="84" y="163" width="9" height="9" fill="white" rx="1" transform="rotate(45 88 167)"/>
+                    <rect x="145" y="105" width="10" height="10" fill="white" rx="1"/>
+                    <rect x="207" y="163" width="9" height="9" fill="white" rx="1" transform="rotate(45 211 167)"/>
+                    <!-- Pitcher mound -->
+                    <circle cx="150" cy="168" r="5" fill="#4a3520" stroke="#5a4530" stroke-width="1"/>
+                    <!-- Park name -->
+                    <text x="150" y="{H-5}" text-anchor="middle" font-size="8" fill="#475569" font-family="monospace">{dims.get("name","")}</text>
+                    <!-- Wall distances -->
+                    <text x="{lf_x-8:.0f}" y="{lf_y:.0f}" text-anchor="middle" font-size="7" fill="#6b7280">{dims.get("LF",330)}</text>
+                    <text x="150" y="{field_coords(0, dims.get("CF",400))[1]-5:.0f}" text-anchor="middle" font-size="7" fill="#6b7280">{dims.get("CF",400)}</text>
+                    <text x="{rf_x+8:.0f}" y="{rf_y:.0f}" text-anchor="middle" font-size="7" fill="#6b7280">{dims.get("RF",330)}</text>
+                '''
+
+                # Green Monster label for Fenway
+                if is_monster:
+                    svg += f'<text x="{lf_x-2:.0f}" y="{lf_y+12:.0f}" font-size="6" fill="#22c55e" transform="rotate(-45 {lf_x:.0f} {lf_y:.0f})">MONSTER</text>'
+
+                # Plot each AB result
+                colors = {"HR":"#fbbf24","Double":"#22c55e","Single":"#3b82f6",
+                          "Lineout":"#f97316","Groundout":"#ef4444",
+                          "Flyout":"#ef4444","Popout":"#ef4444","Strikeout":"#6b7280"}
+                sizes  = {"HR":8,"Double":6,"Single":5,"Lineout":5,
+                          "Groundout":4,"Flyout":4,"Popout":4,"Strikeout":0}
+
+                for ab in abs_results:
+                    result = ab.get("result","Out")
+                    if result == "Strikeout":
+                        continue
+                    sx  = ab.get("spray_x", 0.5)
+                    sy  = ab.get("spray_y", 0.5)
+                    # angle: sx=0 → LF (-45°), sx=1 → RF (+45°)
+                    angle = (sx - 0.5) * 90
+                    # distance: HRs go beyond wall, other hits in field
+                    if result == "HR":
+                        wd = wall_distance(angle, dims)
+                        dist_ft = wd + random.uniform(10, 40)
+                        ab["dist"] = int(dist_ft)
+                    elif result == "Double":
+                        dist_ft = wall_distance(angle, dims) * random.uniform(0.78, 0.92)
+                    elif result == "Single":
+                        dist_ft = random.uniform(120, 200)
+                    elif result == "Lineout":
+                        dist_ft = random.uniform(150, 280)
+                    else:
+                        dist_ft = random.uniform(20, 130)
+
+                    px, py = field_coords(angle, dist_ft)
+                    r = sizes.get(result, 4)
+                    c = colors.get(result, "#6b7280")
+                    svg += f'<circle cx="{px:.0f}" cy="{py:.0f}" r="{r}" fill="{c}" opacity="0.85" stroke="white" stroke-width="0.5"/>'
+                    if result == "HR":
+                        svg += f'<text x="{px:.0f}" y="{py-10:.0f}" text-anchor="middle" font-size="13">💣</text>'
+
+                svg += "</svg>"
+                return svg
+
+            # Run simulations for current game
+            home_batters_sim = g.get("home_batters", [])
+            away_batters_sim = g.get("away_batters", [])
+            home_pitcher_sim = g.get("home_pitcher", "TBD")
+            away_pitcher_sim = g.get("away_pitcher", "TBD")
+            home_pf = pf
+            away_pf = pf
+
+            # Build pitch mix from pitcher data in batter records
+            def get_pitch_mix(batters: list) -> dict:
+                """Extract pitch mix from stored batter data."""
+                for b in batters:
+                    if b.get("pitch_mix_opp"):
+                        return b["pitch_mix_opp"]
+                return {"fb": 0.50, "brk": 0.30, "off": 0.20}
+
+            sim_col1, sim_col2 = st.columns(2)
+
+            for col, batters, pitcher_name, opp_name in [
+                (sim_col1, home_batters_sim, away_pitcher_sim, home_team),
+                (sim_col2, away_batters_sim, home_pitcher_sim, away_team),
+            ]:
+                with col:
+                    st.markdown(f"**{opp_name} BATTERS vs {pitcher_name}**")
+
+                    # Sim leaderboard
+                    sim_results_all = []
+
+                    for b in batters[:8]:
+                        name     = b.get("player_name", "")
+                        bat_side = b.get("bat_side", "R")
+                        algo     = b.get("hit_score", 0)
+                        heat     = b.get("heat_score", 0)
+                        hot_icon = "🔥" if heat >= 0.15 else "🌡️" if heat >= 0.05 else "❄️"
+
+                        # Inject pitch mix from pitcher into batter dict
+                        b["pitch_mix_opp"] = get_pitch_mix(batters)
+
+                        # Simulate 4 ABs
+                        abs_sim = [simulate_ab(b, pitcher_name, pf) for _ in range(4)]
+                        homered = any(ab["result"] == "HR" for ab in abs_sim)
+                        sim_results_all.append((name, homered, algo, abs_sim, bat_side, hot_icon))
+
+                    # Leaderboard
+                    hr_guys = [s for s in sim_results_all if s[1]]
+                    st.markdown(f"**💣 Sim HR: {len(hr_guys)}/{len(sim_results_all)} batters**")
+                    for name, homered, algo, _, _, hot in sim_results_all:
+                        icon = "💣" if homered else "—"
+                        st.markdown(
+                            f'<div style="display:flex;justify-content:space-between;padding:2px 6px;background:{"#1a1200" if homered else "#0c1018"};border-radius:4px;margin-bottom:2px;border:1px solid {"#f59e0b" if homered else "#1c2333"}">'
+                            f'<span style="font-size:.8rem">{hot} {name}</span>'
+                            f'<span style="font-family:\'DM Mono\',monospace;font-size:.8rem;color:{"#fbbf24" if homered else "#475569"}">{icon} {algo:.0f}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+
+                    st.divider()
+
+                    # Detailed AB breakdown per batter
+                    for name, homered, algo, abs_sim, bat_side, hot_icon in sim_results_all:
+                        with st.expander(f"{'💣 ' if homered else ''}{hot_icon} {name} — {algo:.0f} ALGO"):
+                            for i, ab in enumerate(abs_sim):
+                                pt_color = PITCH_COLORS.get(ab["pt"], "#94a3b8")
+                                result   = ab["result"]
+                                res_color = "#fbbf24" if result == "HR" else "#22c55e" if result in ["Single","Double"] else "#ef4444" if result in ["Strikeout"] else "#94a3b8"
+                                ev_str = f" | {ab['ev']:.0f} EV" if ab["ev"] > 0 else ""
+                                dist_str = f" | {ab['dist']}ft" if ab["dist"] > 0 else ""
+                                st.markdown(
+                                    f'<div style="padding:4px 8px;background:#0c1018;border-radius:4px;margin-bottom:3px;border-left:3px solid {pt_color};">'
+                                    f'<span style="font-family:\'DM Mono\',monospace;font-size:.72rem;color:#475569">AB {i+1} </span>'
+                                    f'<span style="font-size:.75rem;color:{pt_color}">{ab["pitch"]} {ab["velo"]}mph</span>'
+                                    f' → <span style="font-weight:700;color:{res_color}">{ab["icon"]} {result}</span>'
+                                    f'<span style="font-size:.7rem;color:#475569">{ev_str}{dist_str}</span>'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )
+
+                            # Spray chart
+                            st.markdown(build_spray_svg(abs_sim, bat_side, venue=g.get("venue", "")), unsafe_allow_html=True)
 
     # ── Full Slate CSV Export ──────────────────────────────────────────────────
     if precomputed:
