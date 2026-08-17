@@ -1400,8 +1400,8 @@ def main():
 
                 # Simulate contact quality — scaled down so HR rate is realistic
                 r = random.random()
-                barrel_thresh  = barrel_rate * park_factor * heat_mult * 0.6  # scale down
-                hh_thresh      = barrel_thresh + (hh_rate - barrel_rate) * 0.5
+                barrel_thresh  = barrel_rate * park_factor * heat_mult * 1.2  # balanced
+                hh_thresh      = barrel_thresh + (hh_rate - barrel_rate) * 0.6
                 contact_thresh = hh_thresh + 0.30
 
                 # Pick pitch name and velo
@@ -1436,7 +1436,7 @@ def main():
                     ev = random.uniform(100, 115)
                     # HR chance: hr_fb_rate already accounts for fly ball → HR conversion
                     # Scale down so overall HR per AB is ~10-20% for elite hitters
-                    hr_chance = hr_fb_rate * 0.5 * park_factor * (1 + max(heat, 0) * 0.15)
+                    hr_chance = hr_fb_rate * 1.2 * park_factor * (1 + max(heat, 0) * 0.2)
                     if random.random() < hr_chance:
                         dist = int(random.uniform(370, 450))
                         spray_y = random.uniform(0.05, 0.25)  # over wall
